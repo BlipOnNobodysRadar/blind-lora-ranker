@@ -7,6 +7,7 @@ images/
 
 # Rating JSON files in backend
 backend/ratings-*.json
+ratings-*.json
 
 # IDE and editor files
 .vscode/
@@ -40,4 +41,4 @@ build/
 
 # Code aggregation output
 aggregated_code.txt
-aggregatedCode.js
+aggregateCode.js
