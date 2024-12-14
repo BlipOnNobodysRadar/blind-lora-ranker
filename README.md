@@ -1,4 +1,4 @@
-# AI Image Blind Elo Ranker
+# Blind LoRA Elo Ranker
 
 A web application for blind comparison ranking of AI-generated images using an Elo rating system. This tool helps evaluate and compare images generated with different LoRA models by tracking both individual image performance and overall LoRA model effectiveness. Basically, if you're testing lora variations on the same prompt, this tool will help you rank them without bias.
 
