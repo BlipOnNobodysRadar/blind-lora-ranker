@@ -40,3 +40,4 @@ build/
 
 # Code aggregation output
 aggregated_code.txt
+aggregatedCode.js

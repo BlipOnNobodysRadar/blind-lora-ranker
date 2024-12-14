@@ -106,7 +106,7 @@ const outputFile = 'aggregated_code.txt';
 const excludeDirectories = ['.git', 'node_modules', 'dist', 'build'];
 const excludeFiles = [
   '.gitignore', 
-  'README.md', 
+  // 'README.md', 
   'aggregated_code.txt', 
   'aggregate-code.js',
   'aggregateCode.js',

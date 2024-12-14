@@ -1,57 +1,54 @@
 # Blind LoRA Elo Ranker
 
-A web application for blind comparison ranking of AI-generated images using an Elo rating system. This tool helps evaluate and compare images generated with different LoRA models by tracking both individual image performance and overall LoRA model effectiveness. Basically, if you're testing lora variations on the same prompt, this tool will help you rank them without bias.
+A web application that lets you rank AI-generated images blindly, reducing visual bias while testing different LoRA (LoRA: Low-Rank Adaptation) model variations on the same prompt. By employing an Elo rating system, you can objectively compare images and their underlying LoRA models.
 
-> **Note**: This is a personal side project in an early state. The core functionality (image comparison, Elo ratings, and LoRA analysis) works, but some features like CSV export are buggy and the UI is basic. Use at your own risk!
+**Why "Blind"?** Because you rate images without knowing which LoRA they came from, ensuring a fair and unbiased ranking. Over time, the Elo ratings reveal which images (and LoRAs) consistently perform better, helping you refine and select the best models.
 
-> **Note**: All ratings are stored in simple JSON files - avoids the need for complicated database dependencies.
+## Key Features
 
-## Features
+- **Blind Comparison**: Compare image pairs without seeing their associated LoRA models, reducing brand/model bias.
+- **Elo Rating System**: Assigns a chess-like Elo rating to each image, adapting ratings with each comparison.
+- **LoRA Performance Tracking**: Automatically extracts LoRA model details from image metadata to evaluate model-level performance.
+- **Multiple Image Subsets**: Organize images into subsets for focused testing scenarios.
+- **Progress Tracking**: The UI shows how many matches have been made for reliability.
+- **Export Options**: Download results as CSV files for further analysis.
+- **Correlation & Comparison**: Compare LoRA performance across different subsets and view correlation metrics.
 
-- **Blind Comparison**: Rate images without knowing their LoRA models to reduce bias
-- **Elo Rating System**: Uses chess-style Elo ratings for accurate ranking
-- **LoRA Model Analysis**: Automatically extracts and tracks LoRA model performance
-- **Multiple Image Sets**: Support for different subsets of images
-- **Progress Tracking**: Visual feedback on rating progress
-- **Export Options**: Download rankings as CSV files
-- **Correlation Analysis**: Compare LoRA performance across different subsets
+## Status
 
-## Setup
+> **Note**: This is an early-stage personal side project. Core functionalities (blind rating, Elo calculation, and LoRA analysis) are stable, but some features, like CSV export and correlation analysis, may have minor bugs. The UI is minimal.
 
-1. Install Node.js if you haven't already
-   - Download the LTS version from [nodejs.org](https://nodejs.org/)
-   - Or use your system's package manager:
+Use at your own risk and feel free to contribute or adapt it for your own needs.
+
+## Prerequisites
+
+- **Node.js (LTS)**: Install from [nodejs.org](https://nodejs.org/) or via your system's package manager:
+  - **Ubuntu/Debian**: `sudo apt install nodejs npm`
+  - **macOS (Homebrew)**: `brew install node`
+  - **Windows**: `winget install OpenJS.NodeJS.LTS`
+
+## Installation
+
+1. **Get the repository**:
+   - **Git Clone**:
      ```bash
-     # Ubuntu/Debian
-     sudo apt install nodejs npm
-     
-     # macOS (using Homebrew)
-     brew install node
-     
-     # Windows
-     winget install OpenJS.NodeJS.LTS
+     git clone https://github.com/BlipOnNobodysRadar/blind-lora-ranker
+     cd blind-lora-ranker
      ```
+   - **Zip Download**: Download the ZIP from GitHub and extract it, then navigate into the project folder.
 
-2. Get the repository:
-
-   Either clone with git:
-   ```bash
-   git clone https://github.com/BlipOnNobodysRadar/blind-lora-ranker
-   cd blind-lora-ranker
-   ```
-
-   Or download and extract the ZIP from the GitHub repository page
-
-3. Install dependencies:
+2. **Install Dependencies**:
    ```bash
    npm install
    ```
 
-4. Create an `images` directory in the project root
-5. Create subdirectories in `images` for each set of images you want to compare
-6. Place PNG images in these subdirectories
+## Organize Images
 
-Example directory structure:
+1. Create an `images` directory at the project root.
+2. Inside `images`, create subdirectories (one per subset).
+3. Place PNG files (with LoRA metadata) in these subdirectories.
+
+Example structure:
 ```
 /images
     /set1
@@ -59,73 +56,44 @@ Example directory structure:
         image2.png
         ...
     /set2
-        image1.png
-        image2.png
+        image3.png
+        image4.png
         ...
 ```
 
 ## Usage
 
-1. Start the server:
+1. **Start the Server**:
    ```bash
    npm start
    ```
+   The server runs by default on http://localhost:3000.
 
-2. Open `http://localhost:3000` in your browser
+2. **Open in Browser**: Go to http://localhost:3000. Select a subset, then start ranking images by clicking on the image you prefer.
 
-3. Use the application:
-   - Select an image subset from the dropdown
-   - Click on the better image in each pair
-   - Track progress in the progress bar
-   - View rankings in the Rankings tabs
-   - Compare LoRA performance in the Compare LoRAs tab
+3. **Navigation**:
+   - Rate Images: `index.html`
+   - View Image Rankings: `rankings.html`
+   - View LoRA Rankings: `lora-rankings.html`
+   - Compare LoRAs Across Subsets: `compare-loras.html`
 
 ## Image Requirements
 
-- Images must be in PNG format
-- PNGs must contain LoRA metadata in their parameters
+- **PNG Format**: Images must be PNG files.
+- **LoRA Metadata**: The PNG files should contain LoRA model metadata in their parameters for automatic extraction and tracking.
 
-## Features in Detail
+## Tips for Reliable Results
 
-### Rating Images
-- Simple click interface
-- Progress tracking for each subset
-- Minimum match thresholds for reliable rankings
+- Aim for at least 5 matches per image to get a minimally reliable rating. More matches = more accuracy.
+- Keep subsets focused on a single prompt or scenario.
+- Compare multiple subsets containing the same LoRAs to get a correlation overview.
+- The "OPC" (OverPerformance Count) metric in the LoRA comparison page helps identify models that outperform subsets' averages.
 
-### Viewing Rankings
-- Sort by rating, matches, or filename
-- Search functionality
-- Export to CSV
-- Visual progress indicators
+## Data Storage
 
-### LoRA Analysis
-- Automatic LoRA model extraction
-- Cross-subset performance comparison
-- Correlation analysis between different subsets
-- Detailed statistics and visualizations
-
-### Data Management
-- Automatic saving of ratings
-- Image deletion capability
-- Multiple subset support
-- Export functionality
-
-## Technical Details
-
-- Backend: Node.js with Express
-- Frontend: Vanilla JavaScript
-- Rating System: Modified Elo with dynamic K-factor
-- Data Storage: Simple JSON files (no database required)
-- Image Metadata: PNG metadata parsing
-
-## Tips for Best Results
-
-1. Meaningful elo ratings can occur with as few as 5 matches, but the more matches the more reliable the ratings.
-2. Create focused subsets for meaningful comparisons
-3. Use consistent prompts within subsets
-4. If testing multiple subsets on the same loras, you can use the compare LoRAs page to see the average performance of the loras across multiple subsets.
-5. The "OPC" metric within the compare LoRAs page is overperformance count. It represents the number of subsets in which the LoRA's rating exceeds that subset's average rating. This helps identify overperformers relative to the group.
+- Elo ratings and results are stored in `ratings-<subset>.json` files.
+- No external database is required, simplifying setup and portability.
 
 ## License
 
-MIT License
+This project is available under the MIT License. See the LICENSE file for details.
