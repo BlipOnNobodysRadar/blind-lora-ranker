@@ -10,6 +10,7 @@ app.use(bodyParser.json());
 // Directories
 const IMAGES_DIR = path.join(__dirname, '../images');
 const FRONTEND_DIR = path.join(__dirname, '../frontend');
+const DATA_DIR = path.join(__dirname, '../data');
 
 // In-memory subsets structure:
 // subsets = {
@@ -28,6 +29,11 @@ let subsets = {};
 if (!fs.existsSync(IMAGES_DIR)) {
   fs.mkdirSync(IMAGES_DIR);
   console.log('Created images directory. Add subdirectories with PNGs to rate.');
+}
+
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR);
+  console.log('Created data directory for ratings storage.');
 }
 
 // Load subsets at startup
@@ -84,7 +90,7 @@ function loadSubset(subset) {
 
   // Load saved ratings if available
   let savedData = { ratings: {}, matchCount: {}, loraModelRatings: {} };
-  const ratingFile = `ratings-${subset}.json`;
+  const ratingFile = path.join(DATA_DIR, `ratings-${subset}.json`);
   if (fs.existsSync(ratingFile)) {
     savedData = JSON.parse(fs.readFileSync(ratingFile, 'utf8'));
   }
@@ -227,7 +233,8 @@ function saveSubsetRatings(subset) {
     };
   }
 
-  fs.writeFileSync(`ratings-${subset}.json`, JSON.stringify({
+  const ratingFile = path.join(DATA_DIR, `ratings-${subset}.json`);
+  fs.writeFileSync(ratingFile, JSON.stringify({
     ratings,
     matchCount,
     loraModelRatings

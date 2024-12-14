@@ -5,8 +5,7 @@ node_modules/
 images/
 */images/
 
-# Rating JSON files in backend
-backend/ratings-*.json
+# Rating JSON files
 ratings-*.json
 
 # IDE and editor files
@@ -42,3 +41,7 @@ build/
 # Code aggregation output
 aggregated_code.txt
 aggregateCode.js
+
+# .gitignore
+data/*.json
+!data/.gitkeep
