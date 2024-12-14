@@ -2,8 +2,8 @@
 
 A web application for blind comparison ranking of AI-generated images using an Elo rating system. This tool helps evaluate and compare images generated with different LoRA models by tracking both individual image performance and overall LoRA model effectiveness. Basically, if you're testing lora variations on the same prompt, this tool will help you rank them without bias.
 
-+ > **Note**: This is a personal side project in an early state. The core functionality (image comparison, Elo ratings, and LoRA analysis) works, but some features like CSV export are buggy and the UI is basic. Use at your own risk!
-+
+> **Note**: This is a personal side project in an early state. The core functionality (image comparison, Elo ratings, and LoRA analysis) works, but some features like CSV export are buggy and the UI is basic. Use at your own risk!
+
 ## Features
 
 - **Blind Comparison**: Rate images without knowing their LoRA models to reduce bias
@@ -17,19 +17,26 @@ A web application for blind comparison ranking of AI-generated images using an E
 ## Setup
 
 1. Install Node.js if you haven't already
-2. Clone this repository
-3. Install dependencies: 
+2. Get the repository:
 
-```bash
-npm install
-```
+   Either clone with git:
+   ```bash
+   git clone https://github.com/your-username/blind-lora-ranker.git
+   cd blind-lora-ranker
+   ```
+
+   Or download and extract the ZIP from the GitHub repository page
+
+3. Install dependencies:
+   ```bash
+   npm install
+   ```
 
 4. Create an `images` directory in the project root
 5. Create subdirectories in `images` for each set of images you want to compare
 6. Place PNG images in these subdirectories
 
 Example directory structure:
-
 ```
 /images
     /set1
@@ -42,15 +49,12 @@ Example directory structure:
         ...
 ```
 
-
 ## Usage
 
 1. Start the server:
-
-```bash
-npm start
-```
-
+   ```bash
+   npm start
+   ```
 
 2. Open `http://localhost:3000` in your browser
 
