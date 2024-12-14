@@ -17,6 +17,19 @@ A web application for blind comparison ranking of AI-generated images using an E
 ## Setup
 
 1. Install Node.js if you haven't already
+   - Download the LTS version from [nodejs.org](https://nodejs.org/)
+   - Or use your system's package manager:
+     ```bash
+     # Ubuntu/Debian
+     sudo apt install nodejs npm
+     
+     # macOS (using Homebrew)
+     brew install node
+     
+     # Windows
+     winget install OpenJS.NodeJS.LTS
+     ```
+
 2. Get the repository:
 
    Either clone with git:
