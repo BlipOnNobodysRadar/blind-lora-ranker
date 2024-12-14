@@ -6,18 +6,32 @@ body {
   text-align: center;
   box-sizing: border-box;
   max-width: 100vw;
+  background: #fafafa;
+  color: #333;
 }
 
 a {
   margin: 0 10px;
   text-decoration: none;
-  color: inherit;
+  color: #007acc;
+}
+
+a:hover {
+  text-decoration: underline;
 }
 
 .navigation {
   display: flex;
   justify-content: center;
+  flex-wrap: wrap;
+  background: #f0f0f0;
+  padding: 10px;
   margin-bottom: 20px;
+}
+
+.navigation a {
+  margin: 5px 15px;
+  font-weight: bold;
 }
 
 /* Progress Bar */
@@ -26,10 +40,11 @@ a {
   width: 80%;
   max-width: 600px;
   height: 30px;
-  background: #e0e0e0;
+  background: #eee;
   margin: 20px auto;
   border-radius: 5px;
   overflow: hidden;
+  border: 1px solid #ccc;
 }
 
 .progress-bar {
@@ -53,6 +68,7 @@ a {
   align-items: center;
   font-weight: bold;
   pointer-events: none;
+  color: #333;
 }
 
 .threshold {
@@ -79,33 +95,50 @@ a {
 /* Image Container */
 .image-container {
   display: flex;
-  justify-content: space-around;
-  align-items: center;
-  margin-top: 50px;
-  gap: 20px;
+  justify-content: center;
+  align-items: flex-start;
   flex-wrap: wrap;
+  gap: 20px;
+  margin-top: 50px;
 }
 
+
+/* Each image wrapper can take up to around half the container width on larger screens */
 .image-wrapper {
+  flex: 0 1 45%;
   display: flex;
   flex-direction: column;
   align-items: center;
-  flex: 1;
-  min-width: 300px;
-  max-width: calc(50% - 10px);
-  position: relative;
+  background: #fff;
+  border: 1px solid #ccc;
+  padding: 10px;
+  border-radius: 5px;
+  box-sizing: border-box;
 }
 
+/* Images will fill the width of their container, and scale down as needed,
+   while preserving aspect ratio. */
 .image-wrapper img {
   width: 100%;
-  max-height: calc(100vh - 200px);
+  height: auto;
+  max-height: calc(100vh - 250px); /* Adjust this if needed */
   object-fit: contain;
-  cursor: pointer;
-  pointer-events: auto;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  margin-bottom: 10px;
 }
 
 .image-wrapper button {
   margin-top: 10px;
+  padding: 5px 10px;
+  background: #c00;
+  color: #fff;
+  border: none;
+  border-radius: 3px;
+}
+
+.image-wrapper button:hover {
+  background: #900;
 }
 
 /* Ranking Containers */
@@ -121,6 +154,7 @@ a {
 
 .ranking-item {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   width: 100%;
   border: 1px solid #ddd;
@@ -128,11 +162,13 @@ a {
   padding: 10px;
   margin: 5px 0;
   align-items: center;
+  background: #fff;
 }
 
 .ranking-item img {
   max-width: 100px;
   margin-right: 20px;
+  border-radius: 3px;
 }
 
 /* Controls */
@@ -144,6 +180,7 @@ a {
   margin: 10px auto;
   width: 90%;
   max-width: 800px;
+  gap: 10px;
 }
 
 .controls input[type="text"] {
@@ -155,19 +192,38 @@ a {
 
 .controls button {
   padding: 5px 10px;
+  border: 1px solid #007acc;
+  background: #007acc;
+  color: #fff;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.controls button:hover {
+  background: #005a99;
+  border-color: #005a99;
 }
 
 /* Summary */
 .summary {
   margin-top: 20px;
+  background: #f9f9f9;
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  width: 80%;
+  max-width: 600px;
+  margin: 20px auto;
+  text-align: left;
 }
 
 /* Ranking Header */
 .ranking-header {
   display: flex;
   justify-content: space-between;
-  width: 100%;
-  margin-bottom: 10px;
+  width: 80%;
+  max-width: 600px;
+  margin: 10px auto;
   cursor: pointer;
 }
 
@@ -175,6 +231,7 @@ a {
   flex: 1;
   text-align: center;
   font-weight: bold;
+  padding: 5px 0;
 }
 
 .ranking-header span.sort-asc::after {
@@ -197,6 +254,7 @@ table {
   border-collapse: collapse;
   width: 100%;
   min-width: 800px;
+  background: #fff;
 }
 
 th, td {
@@ -234,6 +292,9 @@ th.sort-desc::after {
   background-color: #fffae6;
   border: 1px solid #ffd700;
   border-radius: 4px;
+  width: 80%;
+  max-width: 600px;
+  margin: 20px auto;
 }
 
 /* Progress Bar Container for LoRA Rankings */
@@ -245,6 +306,7 @@ th.sort-desc::after {
   border-radius: 5px;
   overflow: hidden;
   margin-top: 5px;
+  border: 1px solid #ccc;
 }
 
 .progress-bar-background {
@@ -262,4 +324,4 @@ th.sort-desc::after {
   left: 0;
   height: 100%;
   background: #4caf50;
-} 
+}

@@ -11,14 +11,15 @@ app.use(bodyParser.json());
 const IMAGES_DIR = path.join(__dirname, '../images');
 const FRONTEND_DIR = path.join(__dirname, '../frontend');
 
-// Serve frontend files
-app.use(express.static(FRONTEND_DIR));
-app.use('/images', express.static(IMAGES_DIR));
-
+// In-memory subsets structure:
 // subsets = {
 //   subsetName: {
-//     images: { imageName: { rating: Number, matches: Number, lora: String } },
-//     loraModels: { loraName: { rating: Number, matches: Number } }
+//     images: {
+//       imageName: { rating: Number, matches: Number, lora: String }
+//     },
+//     loraModels: {
+//       loraName: { rating: Number, matches: Number }
+//     }
 //   }
 // }
 let subsets = {};
@@ -26,14 +27,20 @@ let subsets = {};
 // Ensure required directories exist
 if (!fs.existsSync(IMAGES_DIR)) {
   fs.mkdirSync(IMAGES_DIR);
-  console.log('Created images directory. Please add image subdirectories containing PNG files to rate.');
+  console.log('Created images directory. Add subdirectories with PNGs to rate.');
 }
 
-// Load all subsets at startup
+// Load subsets at startup
 loadAllSubsets();
 
+// Serve frontend files
+app.use(express.static(FRONTEND_DIR));
+app.use('/images', express.static(IMAGES_DIR));
+
+/**
+ * Loads all subsets from the /images directory.
+ */
 function loadAllSubsets() {
-  // Check if directory exists and has subdirectories
   if (!fs.existsSync(IMAGES_DIR)) {
     console.log('Images directory not found. Creating empty directory.');
     fs.mkdirSync(IMAGES_DIR);
@@ -47,11 +54,10 @@ function loadAllSubsets() {
     });
 
   if (allSubsets.length === 0) {
-    console.log('\nNo image subdirectories found.');
-    console.log('To use this tool:');
-    console.log('1. Create subdirectories in the "images" folder');
-    console.log('2. Add PNG images with LoRA metadata to rate in those subdirectories');
-    console.log('Example structure:');
+    console.log('\nNo image subdirectories found. Instructions:\n');
+    console.log('1. Create subdirectories in the "images" folder.');
+    console.log('2. Add PNG images with LoRA metadata into those subdirectories.');
+    console.log('Example:');
     console.log('images/');
     console.log('  ├── subset1/');
     console.log('  │   ├── image1.png');
@@ -59,8 +65,7 @@ function loadAllSubsets() {
     console.log('  └── subset2/');
     console.log('      ├── image3.png');
     console.log('      └── image4.png\n');
-    console.log('After adding subsets, restart the server and reload localhost:3000 in your browser to start rating.');
-
+    console.log('After adding images, restart the server and reload http://localhost:3000.');
     return;
   }
 
@@ -69,12 +74,15 @@ function loadAllSubsets() {
   });
 }
 
+/**
+ * Loads a single subset and its ratings from disk, if available.
+ * @param {string} subset - The subset name
+ */
 function loadSubset(subset) {
   const subsetPath = path.join(IMAGES_DIR, subset);
-  const files = fs.readdirSync(subsetPath)
-    .filter(file => file.toLowerCase().endsWith('.png'));
+  const files = fs.readdirSync(subsetPath).filter(file => file.toLowerCase().endsWith('.png'));
 
-  // Load previous ratings if available
+  // Load saved ratings if available
   let savedData = { ratings: {}, matchCount: {}, loraModelRatings: {} };
   const ratingFile = `ratings-${subset}.json`;
   if (fs.existsSync(ratingFile)) {
@@ -87,15 +95,12 @@ function loadSubset(subset) {
   for (const file of files) {
     const metadata = getPngMetadata(path.join(subsetPath, file));
     const loraMatch = metadata.match(/<lora:([^:]+):/);
-    if (!loraMatch) {
-      // Skip images without LoRA metadata
-      continue;
-    }
+
+    // If no LoRA metadata found, we skip to avoid polluting results.
+    if (!loraMatch) continue;
 
     const loraModel = loraMatch[1];
-    const imageRating = savedData.ratings[file] !== undefined 
-      ? savedData.ratings[file] 
-      : 1000;
+    const imageRating = savedData.ratings[file] !== undefined ? savedData.ratings[file] : 1000;
     const imageMatches = savedData.matchCount[file] || 0;
 
     images[file] = {
@@ -107,16 +112,18 @@ function loadSubset(subset) {
     if (!loraModels[loraModel]) {
       const loraRating = savedData.loraModelRatings[loraModel]?.rating || 1000;
       const loraMatches = savedData.loraModelRatings[loraModel]?.count || 0;
-      loraModels[loraModel] = {
-        rating: loraRating,
-        matches: loraMatches
-      };
+      loraModels[loraModel] = { rating: loraRating, matches: loraMatches };
     }
   }
 
   subsets[subset] = { images, loraModels };
 }
 
+/**
+ * Extracts PNG metadata as a string.
+ * @param {string} imagePath - Path to the PNG image
+ * @returns {string} - Extracted parameters or empty string if not found
+ */
 function getPngMetadata(imagePath) {
   try {
     const buffer = pngMetadata.readFileSync(imagePath);
@@ -129,35 +136,56 @@ function getPngMetadata(imagePath) {
   }
 }
 
-// Elo calculation helpers
+/**
+ * Updates Elo ratings for two entities (images or LoRAs).
+ * @param {object} winner - Object with {rating, matches}
+ * @param {object} loser - Object with {rating, matches}
+ */
 function updateRatings(winner, loser) {
-  const getK = (matches) => {
+  const getKFactor = (matches) => {
+    // Dynamic K-factor: Higher for fewer matches, stabilizes with more matches
     if (matches < 10) return 64;
     if (matches < 20) return 48;
     if (matches < 30) return 32;
     return 24;
   };
 
-  const kWinner = getK(winner.matches || 0);
-  const kLoser = getK(loser.matches || 0);
+  const kWinner = getKFactor(winner.matches || 0);
+  const kLoser = getKFactor(loser.matches || 0);
 
-  const expectedWinner = 1 / (1 + Math.pow(10, ((loser.rating || 0) - (winner.rating || 0)) / 400));
+  const expectedWinner = 1 / (1 + Math.pow(10, ((loser.rating || 1000) - (winner.rating || 1000)) / 400));
 
-  winner.rating = (winner.rating || 0) + kWinner * (1 - expectedWinner);
-  loser.rating = (loser.rating || 0) + kLoser * (0 - expectedWinner);
+  winner.rating = (winner.rating || 1000) + kWinner * (1 - expectedWinner);
+  loser.rating = (loser.rating || 1000) + kLoser * (0 - expectedWinner);
 
   winner.matches = (winner.matches || 0) + 1;
   loser.matches = (loser.matches || 0) + 1;
 }
 
+/**
+ * Selects an optimal pair of images to rate based on their match counts and rating differences.
+ * Tries to avoid selecting images from the same LoRA model.
+ * @param {object} images - Map of image filenames to their data
+ * @returns {string[]} - An array containing two image filenames to compare
+ */
 function selectPair(images) {
   const keys = Object.keys(images);
   if (keys.length < 2) return [];
 
   const getPriority = (img1, img2) => {
-    const matchScore = 1 / (Math.min(images[img1].matches || 1, images[img2].matches || 1));
-    const ratingDiff = Math.abs((images[img1].rating || 0) - (images[img2].rating || 0));
-    return matchScore * (1000 - ratingDiff);
+    const img1Matches = images[img1].matches || 0;
+    const img2Matches = images[img2].matches || 0;
+    const ratingDiff = Math.abs((images[img1].rating || 1000) - (images[img2].rating || 1000));
+    const matchScore = 1 / Math.min(img1Matches + 1, img2Matches + 1);
+
+    let score = matchScore * (1000 - ratingDiff);
+
+    // Apply a penalty if both images are from the same LoRA
+    if (images[img1].lora === images[img2].lora) {
+      score *= 0.9; // reduce the score by 10%, adjust this factor as needed
+    }
+
+    return score;
   };
 
   let bestPair = [keys[0], keys[1]];
@@ -176,6 +204,11 @@ function selectPair(images) {
   return bestPair;
 }
 
+
+/**
+ * Saves the updated ratings and matches for a subset to disk.
+ * @param {string} subset - The subset name
+ */
 function saveSubsetRatings(subset) {
   const { images, loraModels } = subsets[subset];
   const ratings = {};
@@ -208,11 +241,13 @@ app.get('/api/subsets', (req, res) => {
 
 app.get('/api/match/:subset', (req, res) => {
   const subset = req.params.subset;
-  if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
+  if (!subsets[subset]) {
+    return res.status(404).json({ error: 'Subset not found' });
+  }
 
   const pair = selectPair(subsets[subset].images);
   if (pair.length < 2) {
-    return res.status(400).json({ error: 'Not enough images to form a pair' });
+    return res.status(400).json({ error: 'Not enough images to form a pair. Add more images or try another subset.' });
   }
 
   res.json({ image1: pair[0], image2: pair[1] });
@@ -221,11 +256,12 @@ app.get('/api/match/:subset', (req, res) => {
 app.post('/api/vote/:subset', (req, res) => {
   const subset = req.params.subset;
   const { winner, loser } = req.body;
-  if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
 
+  if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
   const { images, loraModels } = subsets[subset];
+
   if (!images[winner] || !images[loser]) {
-    return res.status(400).json({ error: 'Invalid winner/loser image' });
+    return res.status(400).json({ error: 'Invalid winner/loser image provided.' });
   }
 
   // Update image ratings
@@ -234,75 +270,13 @@ app.post('/api/vote/:subset', (req, res) => {
   const winnerLora = images[winner].lora;
   const loserLora = images[loser].lora;
 
-  // Update Lora models if different
+  // Update LoRA model ratings if we have distinct LoRAs
   if (winnerLora && loserLora && winnerLora !== loserLora) {
     updateRatings(loraModels[winnerLora], loraModels[loserLora]);
   }
 
   saveSubsetRatings(subset);
-  res.json({ message: 'Vote recorded' });
-});
-
-app.get('/api/elo-rankings/:subset', (req, res) => {
-  const subset = req.params.subset;
-  if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
-
-  const { images } = subsets[subset];
-  const ranked = Object.keys(images)
-    .sort((a, b) => images[b].rating - images[a].rating)
-    .map(img => ({ image: img, rating: images[img].rating, matches: images[img].matches }));
-
-  res.json(ranked);
-});
-
-app.get('/api/lora-rankings/:subset', (req, res) => {
-  const subset = req.params.subset;
-  if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
-
-  const { loraModels } = subsets[subset];
-  const ranked = Object.keys(loraModels)
-    .sort((a, b) => loraModels[b].rating - loraModels[a].rating)
-    .map(lm => ({ lora: lm, rating: loraModels[lm].rating, matches: loraModels[lm].matches }));
-
-  res.json(ranked);
-});
-
-app.delete('/api/image/:subset/:image', (req, res) => {
-  const { subset, image } = req.params;
-  if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
-
-  const { images } = subsets[subset];
-  if (!images[image]) return res.status(400).json({ error: 'Image not found in subset' });
-
-  const imagePath = path.join(IMAGES_DIR, subset, image);
-  if (fs.existsSync(imagePath)) {
-    fs.unlinkSync(imagePath);
-  }
-
-  // Remove from memory and save
-  delete images[image];
-  saveSubsetRatings(subset);
-
-  res.json({ message: 'Image deleted' });
-});
-
-app.get('/api/progress/:subset', (req, res) => {
-  const subset = req.params.subset;
-  if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
-
-  const { images } = subsets[subset];
-  const imageList = Object.values(images);
-  if (imageList.length === 0) {
-    return res.json({ minimalMatches: 0, totalImages: 0 });
-  }
-
-  // Find the minimal number of matches across all images
-  const minimalMatches = imageList.reduce((minVal, img) => {
-    return Math.min(minVal, img.matches || 0);
-  }, Infinity);
-
-  const totalImages = imageList.length;
-  res.json({ minimalMatches, totalImages });
+  res.json({ message: 'Vote recorded successfully.' });
 });
 
 app.get('/api/elo-rankings/:subset', (req, res) => {
@@ -336,6 +310,39 @@ app.get('/api/lora-rankings/:subset', (req, res) => {
     }));
 
   res.json(ranked);
+});
+
+app.delete('/api/image/:subset/:image', (req, res) => {
+  const { subset, image } = req.params;
+  if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
+
+  const { images } = subsets[subset];
+  if (!images[image]) return res.status(400).json({ error: 'Image not found in this subset.' });
+
+  const imagePath = path.join(IMAGES_DIR, subset, image);
+  if (fs.existsSync(imagePath)) {
+    fs.unlinkSync(imagePath);
+  }
+
+  delete images[image];
+  saveSubsetRatings(subset);
+
+  res.json({ message: 'Image deleted successfully.' });
+});
+
+app.get('/api/progress/:subset', (req, res) => {
+  const subset = req.params.subset;
+  if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
+
+  const { images } = subsets[subset];
+  const imageList = Object.values(images);
+  if (imageList.length === 0) {
+    return res.json({ minimalMatches: 0, totalImages: 0 });
+  }
+
+  const minimalMatches = imageList.reduce((minVal, img) => Math.min(minVal, img.matches || 0), Infinity);
+  const totalImages = imageList.length;
+  res.json({ minimalMatches, totalImages });
 });
 
 // CSV Export for Images
@@ -377,10 +384,11 @@ app.get('/api/export/:subset/lora/csv', (req, res) => {
   res.send(csv);
 });
 
-// Summary Statistics
+// Summary Statistics for Images
 app.get('/api/summary/:subset/images', (req, res) => {
   const subset = req.params.subset;
   if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
+
   const { images } = subsets[subset];
   const imageArray = Object.values(images);
   if (imageArray.length === 0) {
@@ -392,9 +400,11 @@ app.get('/api/summary/:subset/images', (req, res) => {
   res.json({ count, averageRating, averageMatches });
 });
 
+// Summary Statistics for LoRAs
 app.get('/api/summary/:subset/lora', (req, res) => {
   const subset = req.params.subset;
   if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
+
   const { loraModels } = subsets[subset];
   const loraArray = Object.values(loraModels);
   if (loraArray.length === 0) {
@@ -406,7 +416,6 @@ app.get('/api/summary/:subset/lora', (req, res) => {
   res.json({ count, averageRating, averageMatches });
 });
 
-
 app.listen(3000, () => {
-  console.log('Server running on port 3000');
+  console.log('Server running on port 3000. Open http://localhost:3000 in your browser.');
 });
