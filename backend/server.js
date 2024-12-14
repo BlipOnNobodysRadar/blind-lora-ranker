@@ -59,6 +59,8 @@ function loadAllSubsets() {
     console.log('  └── subset2/');
     console.log('      ├── image3.png');
     console.log('      └── image4.png\n');
+    console.log('After adding subsets, restart the server and reload localhost:3000 in your browser to start rating.');
+
     return;
   }
 
