@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Compare LoRA Performance</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Standardized Navigation Bar -->
+  <nav class="navigation">
+    <a href="index.html">Rate Images</a>
+    <a href="rankings.html">View Image Elo Rankings</a>
+    <a href="lora-rankings.html">View LoRA Elo Rankings</a>
+    <a href="compare-loras.html">Compare LoRAs</a>
+  </nav>
+
+  <h1>Compare LoRA Performance Across Subsets</h1>
+  
+  <div class="controls" style="flex-direction:column;align-items:center;">
+    <div>
+      <label for="subset-select">Select Multiple Subsets (Ctrl/Cmd+Click):</label><br>
+      <select id="subset-select" multiple></select>
+      <button onclick="compare()">Compare</button>
+      <button onclick="downloadCSV()">Download CSV</button>
+    </div>
+    <div id="additional-controls" style="display:none;margin-top:10px;">
+      <label for="baseline-select">Baseline for Differences:</label>
+      <select id="baseline-select" onchange="changeBaseline()"></select>
+
+      <label style="margin-left:20px;">
+        <input type="checkbox" id="anonymize-checkbox" onchange="toggleAnonymize()">
+        Anonymize Subset Names
+      </label>
+    </div>
+  </div>
+
+  <div id="correlation"></div>
+
+  <div style="max-width:800px;margin:20px auto;text-align:left;font-size:0.9em;">
+    <strong>What is Correlation Between Subsets?</strong><br>
+    This table shows how similarly the subsets rank the same LoRAs. A correlation of 1.00 means two subsets rank LoRAs identically. A correlation near 0 means no relationship, and a negative correlation means they tend to rank them inversely. High positive correlation suggests similar performance patterns across subsets.
+  </div>
+
+  <div id="search-box" style="margin-top:20px;">
+    <label for="search">Filter by LoRA name:</label>
+    <input type="text" id="search" placeholder="Type to search..." oninput="renderTable()">
+  </div>
+
+  <div class="table-container">
+    <table id="comparison-table">
+      <thead id="table-head"></thead>
+      <tbody id="table-body"></tbody>
+    </table>
+  </div>
+
+  <script src="compare-loras.js"></script>
+</body>
+</html>

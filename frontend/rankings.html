@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Image Elo Rankings</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Standardized Navigation Bar -->
+  <nav class="navigation">
+    <a href="index.html">Rate Images</a>
+    <a href="rankings.html">View Image Elo Rankings</a>
+    <a href="lora-rankings.html">View LoRA Elo Rankings</a>
+    <a href="compare-loras.html">Compare LoRAs</a>
+  </nav>
+
+  <div class="subset-select">
+    <label for="subset">Choose a subset:</label>
+    <select id="subset" onchange="changeSubset()"></select>
+  </div>
+
+  <div class="controls">
+    <div>
+      <label for="search">Search Images:</label>
+      <input type="text" id="search" oninput="filterResults()" placeholder="Type to search...">
+    </div>
+    <div>
+      <button onclick="downloadCSV()">Download CSV</button>
+    </div>
+  </div>
+
+  <h1>Image Elo Rankings</h1>
+  <div class="summary" id="summary"></div>
+  
+  <div class="ranking-header" id="ranking-header">
+    <span data-sort="image">Image</span>
+    <span data-sort="matches">Matches</span>
+    <span data-sort="rating">Rating</span>
+  </div>
+
+  <div class="ranking-container" id="ranking-container"></div>
+  <script>
+    let rankingsData = [];
+    let currentSubset = '';
+    let currentSort = { field: 'rating', direction: 'desc' };
+    
+    document.addEventListener('DOMContentLoaded', () => {
+      fetchSubsets();
+    });
+
+    function fetchSubsets() {
+      fetch('/api/subsets')
+        .then(res => res.json())
+        .then(data => {
+          const subsetSelect = document.getElementById('subset');
+          subsetSelect.innerHTML = '';
+          data.forEach(s => {
+            const option = document.createElement('option');
+            option.value = s;
+            option.textContent = s;
+            subsetSelect.appendChild(option);
+          });
+          const params = new URLSearchParams(window.location.search);
+          currentSubset = params.get('subset') || data[0];
+          subsetSelect.value = currentSubset;
+          fetchRankings(currentSubset);
+          fetchSummary(currentSubset);
+        })
+        .catch(err => console.error('Error fetching subsets:', err));
+    }
+
+    function changeSubset() {
+      const subset = document.getElementById('subset').value;
+      window.location.search = `?subset=${subset}`;
+    }
+
+    function fetchRankings(subset) {
+      fetch(`/api/elo-rankings/${subset}`)
+        .then(res => res.json())
+        .then(data => {
+          rankingsData = data;
+          renderRankings();
+        })
+        .catch(err => console.error('Error fetching rankings:', err));
+    }
+
+    function fetchSummary(subset) {
+      fetch(`/api/summary/${subset}/images`)
+        .then(res => res.json())
+        .then(data => {
+          const summaryDiv = document.getElementById('summary');
+          summaryDiv.innerHTML = `
+            <p>Total Images: ${data.count}</p>
+            <p>Average Rating: ${data.averageRating.toFixed(2)}</p>
+            <p>Average Matches: ${data.averageMatches.toFixed(2)}</p>
+          `;
+        })
+        .catch(err => console.error('Error fetching summary:', err));
+    }
+
+    function renderRankings() {
+      sortRankings();
+      const container = document.getElementById('ranking-container');
+      container.innerHTML = '';
+      const searchTerm = document.getElementById('search').value.toLowerCase();
+
+      rankingsData
+        .filter(item => item.image.toLowerCase().includes(searchTerm))
+        .forEach(item => {
+          const div = document.createElement('div');
+          div.className = 'ranking-item';
+          div.innerHTML = `
+            <img src="images/${currentSubset}/${item.image}" alt="${item.image}">
+            <span>${item.image} (Matches: ${item.matches})</span>
+            <span>Rating: ${item.rating.toFixed(2)}</span>
+          `;
+          container.appendChild(div);
+        });
+    }
+
+    function filterResults() {
+      renderRankings();
+    }
+
+    function sortRankings() {
+      rankingsData.sort((a, b) => {
+        let valA = a[currentSort.field];
+        let valB = b[currentSort.field];
+        if (currentSort.field === 'image') {
+          valA = valA.toLowerCase();
+          valB = valB.toLowerCase();
+        }
+        if (valA < valB) return currentSort.direction === 'asc' ? -1 : 1;
+        if (valA > valB) return currentSort.direction === 'asc' ? 1 : -1;
+        return 0;
+      });
+      updateSortIndicator();
+    }
+
+    function updateSortIndicator() {
+      const header = document.getElementById('ranking-header');
+      header.querySelectorAll('span').forEach(span => {
+        span.classList.remove('sort-asc', 'sort-desc');
+        if (span.dataset.sort === currentSort.field) {
+          span.classList.add(currentSort.direction === 'asc' ? 'sort-asc' : 'sort-desc');
+        }
+      });
+    }
+
+    document.getElementById('ranking-header').addEventListener('click', (e) => {
+      if (!e.target.dataset.sort) return;
+      const field = e.target.dataset.sort;
+      if (field === currentSort.field) {
+        // Toggle direction
+        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+      } else {
+        currentSort.field = field;
+        currentSort.direction = 'asc';
+      }
+      renderRankings();
+    });
+
+    function downloadCSV() {
+      window.location.href = `/api/export/${currentSubset}/images/csv`;
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>AI Image Elo Ranker</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Standardized Navigation Bar -->
+  <nav class="navigation">
+    <a href="index.html">Rate Images</a>
+    <a href="rankings.html">View Image Elo Rankings</a>
+    <a href="lora-rankings.html">View LoRA Elo Rankings</a>
+    <a href="compare-loras.html">Compare LoRAs</a>
+  </nav>
+
+  <div class="navigation">
+    <label for="subset-select">Select Subset:</label>
+    <select id="subset-select" onchange="changeSubset()"></select>
+  </div>
+
+  <!-- Progress Bar Section -->
+  <div class="progress-container">
+    <div class="progress-bar" id="overall-progress-bar"></div>
+    <div class="progress-label" id="progress-label">0/20</div>
+    <div class="threshold threshold-minimum">
+      <span class="threshold-label">5 (minimum)</span>
+    </div>
+    <div class="threshold threshold-decent">
+      <span class="threshold-label">10 (decent)</span>
+    </div>
+    <div class="threshold threshold-good">
+      <span class="threshold-label">20 (good)</span>
+    </div>
+  </div>
+
+  <div class="image-container">
+    <div class="image-wrapper">
+      <img id="image1" src="" alt="Image 1" onclick="vote(1)">
+      <button onclick="confirmDelete(1)">Delete Image 1</button>
+    </div>
+    <div class="image-wrapper">
+      <img id="image2" src="" alt="Image 2" onclick="vote(2)">
+      <button onclick="confirmDelete(2)">Delete Image 2</button>
+    </div>
+  </div>
+  <div class="navigation" style="margin-top:20px;">
+    <a href="rankings.html">View Image Elo Rankings</a>
+    <a href="lora-rankings.html">View LoRA Elo Rankings</a>
+  </div>
+  <script src="script.js" defer></script>
+</body>
+</html>

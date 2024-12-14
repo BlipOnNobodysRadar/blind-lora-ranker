@@ -1,0 +1,42 @@
+# Node dependencies
+node_modules/
+
+# Image directories and their contents
+images/
+*/images/
+
+# Rating JSON files in backend
+backend/ratings-*.json
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Build directories
+dist/
+build/
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Code aggregation output
+aggregated_code.txt
