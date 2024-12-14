@@ -4,6 +4,8 @@ A web application for blind comparison ranking of AI-generated images using an E
 
 > **Note**: This is a personal side project in an early state. The core functionality (image comparison, Elo ratings, and LoRA analysis) works, but some features like CSV export are buggy and the UI is basic. Use at your own risk!
 
+> **Note**: All ratings are stored in simple JSON files - avoids the need for complicated database dependencies.
+
 ## Features
 
 - **Blind Comparison**: Rate images without knowing their LoRA models to reduce bias
@@ -113,7 +115,7 @@ Example directory structure:
 - Backend: Node.js with Express
 - Frontend: Vanilla JavaScript
 - Rating System: Modified Elo with dynamic K-factor
-- Data Storage: JSON files
+- Data Storage: Simple JSON files (no database required)
 - Image Metadata: PNG metadata parsing
 
 ## Tips for Best Results
