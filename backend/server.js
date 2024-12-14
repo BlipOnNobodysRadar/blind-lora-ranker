@@ -23,12 +23,44 @@ app.use('/images', express.static(IMAGES_DIR));
 // }
 let subsets = {};
 
+// Ensure required directories exist
+if (!fs.existsSync(IMAGES_DIR)) {
+  fs.mkdirSync(IMAGES_DIR);
+  console.log('Created images directory. Please add image subdirectories containing PNG files to rate.');
+}
+
 // Load all subsets at startup
 loadAllSubsets();
 
 function loadAllSubsets() {
+  // Check if directory exists and has subdirectories
+  if (!fs.existsSync(IMAGES_DIR)) {
+    console.log('Images directory not found. Creating empty directory.');
+    fs.mkdirSync(IMAGES_DIR);
+    return;
+  }
+
   const allSubsets = fs.readdirSync(IMAGES_DIR)
-    .filter(dir => fs.statSync(path.join(IMAGES_DIR, dir)).isDirectory());
+    .filter(dir => {
+      const dirPath = path.join(IMAGES_DIR, dir);
+      return fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory();
+    });
+
+  if (allSubsets.length === 0) {
+    console.log('\nNo image subdirectories found.');
+    console.log('To use this tool:');
+    console.log('1. Create subdirectories in the "images" folder');
+    console.log('2. Add PNG images with LoRA metadata to rate in those subdirectories');
+    console.log('Example structure:');
+    console.log('images/');
+    console.log('  ├── subset1/');
+    console.log('  │   ├── image1.png');
+    console.log('  │   └── image2.png');
+    console.log('  └── subset2/');
+    console.log('      ├── image3.png');
+    console.log('      └── image4.png\n');
+    return;
+  }
 
   allSubsets.forEach(subset => {
     loadSubset(subset);
