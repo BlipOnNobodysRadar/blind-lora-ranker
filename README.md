@@ -21,7 +21,7 @@ A web application for blind comparison ranking of AI-generated images using an E
 
    Either clone with git:
    ```bash
-   git clone https://github.com/your-username/blind-lora-ranker.git
+   git clone https://github.com/BlipOnNobodysRadar/blind-lora-ranker
    cd blind-lora-ranker
    ```
 
