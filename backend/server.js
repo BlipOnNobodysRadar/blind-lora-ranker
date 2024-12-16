@@ -81,14 +81,18 @@ function loadAllSubsets() {
 }
 
 /**
- * Loads a single subset and its ratings from disk, if available.
- * @param {string} subset - The subset name
+ * Loads a single image subset and its stored ratings.
+ * - Reads PNG files from subset directory
+ * - Extracts LoRA model names from metadata
+ * - Loads previous ratings if available
+ * - Builds subset data structure with images and LoRA models
+ * @param {string} subset - The subset directory name
  */
 function loadSubset(subset) {
   const subsetPath = path.join(IMAGES_DIR, subset);
   const files = fs.readdirSync(subsetPath).filter(file => file.toLowerCase().endsWith('.png'));
 
-  // Load saved ratings if available
+  // Load previous ratings data if it exists
   let savedData = { ratings: {}, matchCount: {}, loraModelRatings: {} };
   const ratingFile = path.join(DATA_DIR, `ratings-${subset}.json`);
   if (fs.existsSync(ratingFile)) {
@@ -99,48 +103,153 @@ function loadSubset(subset) {
   let loraModels = {};
 
   for (const file of files) {
-    const metadata = getPngMetadata(path.join(subsetPath, file));
-    const loraMatch = metadata.match(/<lora:([^:]+):/);
+    const loraModel = getPngMetadata(path.join(subsetPath, file));
+    if (!loraModel) continue; // Skip images without identifiable LoRA metadata
 
-    // If no LoRA metadata found, we skip to avoid polluting results.
-    if (!loraMatch) continue;
-
-    const loraModel = loraMatch[1];
-    const imageRating = savedData.ratings[file] !== undefined ? savedData.ratings[file] : 1000;
-    const imageMatches = savedData.matchCount[file] || 0;
-
+    // Initialize or load image data
     images[file] = {
-      rating: imageRating,
-      matches: imageMatches,
+      rating: savedData.ratings[file] ?? 1000,
+      matches: savedData.matchCount[file] ?? 0,
       lora: loraModel
     };
 
+    // Initialize or load LoRA model data
     if (!loraModels[loraModel]) {
-      const loraRating = savedData.loraModelRatings[loraModel]?.rating || 1000;
-      const loraMatches = savedData.loraModelRatings[loraModel]?.count || 0;
-      loraModels[loraModel] = { rating: loraRating, matches: loraMatches };
+      loraModels[loraModel] = {
+        rating: savedData.loraModelRatings[loraModel]?.rating ?? 1000,
+        matches: savedData.loraModelRatings[loraModel]?.count ?? 0
+      };
     }
   }
 
   subsets[subset] = { images, loraModels };
 }
 
+
 /**
- * Extracts PNG metadata as a string.
+ * Extracts LoRA model name from PNG metadata.
+ * Supports both Auto1111 (Stable Diffusion WebUI) and ComfyUI metadata formats.
  * @param {string} imagePath - Path to the PNG image
- * @returns {string} - Extracted parameters or empty string if not found
+ * @returns {string} - LoRA model name if found, otherwise empty string
  */
 function getPngMetadata(imagePath) {
   try {
     const buffer = pngMetadata.readFileSync(imagePath);
     const chunks = pngMetadata.splitChunk(buffer);
-    const textChunks = chunks.filter(c => c.type === 'tEXt');
-    const parametersChunk = textChunks.find(c => c.data.includes('parameters'));
-    return parametersChunk ? parametersChunk.data : '';
-  } catch {
+
+    // Extract all tEXt chunks and parse keyword/text
+    const textChunks = chunks
+      .filter(c => c.type === 'tEXt')
+      .map(c => parseTextChunk(c.data));
+
+    // 1. Try Auto1111 format: Look for keyword = 'parameters'
+    const parametersChunk = textChunks.find(c => c.keyword === 'parameters');
+    if (parametersChunk) {
+      // Extract from "<lora:modelName:..."
+      const loraMatch = parametersChunk.text.match(/<lora:([^:]+):/);
+      if (loraMatch && loraMatch[1]) {
+        return loraMatch[1].trim();
+      }
+      // If no LoRA found, continue to ComfyUI attempt
+    }
+
+    // 2. Try ComfyUI format: look for 'prompt' chunk
+    const promptChunk = textChunks.find(c => c.keyword === 'prompt');
+    if (promptChunk) {
+      try {
+        const jsonData = JSON.parse(promptChunk.text);
+        const loraName = extractLoraFromComfyUI(jsonData);
+        if (loraName) return loraName;
+      } catch (err) {
+        // If JSON parse fails, continue
+      }
+    }
+
+    // 3. If not found in prompt, try 'workflow'
+    const workflowChunk = textChunks.find(c => c.keyword === 'workflow');
+    if (workflowChunk) {
+      try {
+        const jsonData = JSON.parse(workflowChunk.text);
+        const loraName = extractLoraFromWorkflow(jsonData);
+        if (loraName) return loraName;
+      } catch (err) {
+        // No valid workflow or no LoraLoader found
+      }
+    }
+
+    // If no LoRA found
+    return '';
+
+  } catch (err) {
+    console.error('Error parsing PNG metadata:', err);
     return '';
   }
 }
+
+function parseTextChunk(dataBuffer) {
+  // tEXt chunk: keyword\0text
+  const rawStr = dataBuffer.toString('utf8');
+  const nullIndex = rawStr.indexOf('\0');
+  if (nullIndex === -1) {
+    // Malformed chunk, return empty
+    return { keyword: '', text: '' };
+  }
+  const keyword = rawStr.slice(0, nullIndex);
+  const text = rawStr.slice(nullIndex + 1);
+  return { keyword, text };
+}
+
+function extractLoraFromComfyUI(jsonData) {
+  // ComfyUI old format: LoraLoader nodes are direct children with "class_type": "LoraLoader"
+  for (const key in jsonData) {
+    const node = jsonData[key];
+    if (node && node.class_type === 'LoraLoader') {
+      const name = extractNameFromLoraNode(node);
+      if (name) return name;
+    }
+  }
+  return '';
+}
+
+function extractLoraFromWorkflow(jsonData) {
+  // Workflow format: "nodes" array
+  if (jsonData && Array.isArray(jsonData.nodes)) {
+    for (const node of jsonData.nodes) {
+      if (node.class_type === 'LoraLoader') {
+        const name = extractNameFromLoraNode(node);
+        if (name) return name;
+      }
+    }
+  }
+  return '';
+}
+
+function extractNameFromLoraNode(node) {
+  // Check node.inputs.lora_name first
+  if (node.inputs && node.inputs.lora_name) {
+    return extractLoraNameFromPath(node.inputs.lora_name);
+  }
+
+  // Check widgets_values array
+  if (Array.isArray(node.widgets_values) && node.widgets_values.length > 0) {
+    const val = node.widgets_values[0];
+    if (typeof val === 'string') {
+      return extractLoraNameFromPath(val);
+    }
+  }
+
+  return '';
+}
+
+function extractLoraNameFromPath(loraPath) {
+  // Remove directories
+  let name = loraPath.split('/').pop();
+  // Remove extension
+  name = name.replace(/\.(safetensors|ckpt|pt|bin)$/i, '');
+  return name.trim();
+}
+
+
 
 /**
  * Updates Elo ratings for two entities (images or LoRAs).
