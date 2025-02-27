@@ -460,6 +460,19 @@ app.get('/api/progress/:subset', (req, res) => {
   const totalImages = imageList.length;
   res.json({ minimalMatches, totalImages });
 });
+// Helper function to escape CSV values
+function escapeCSV(value) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+  
+  const strValue = String(value);
+  // If the value contains quotes, commas, or newlines, it needs to be quoted and quotes doubled
+  if (strValue.includes('"') || strValue.includes(',') || strValue.includes('\n')) {
+    return '"' + strValue.replace(/"/g, '""') + '"';
+  }
+  return strValue;
+}
 
 // CSV Export for Images
 app.get('/api/export/:subset/images/csv', (req, res) => {
@@ -475,7 +488,10 @@ app.get('/api/export/:subset/images/csv', (req, res) => {
     images[img].matches
   ]);
 
-  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const csv = [
+    headers.join(','), 
+    ...rows.map(r => r.map(escapeCSV).join(','))
+  ].join('\n');
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename=${subset}-images.csv`);
   res.send(csv);
@@ -494,7 +510,10 @@ app.get('/api/export/:subset/lora/csv', (req, res) => {
     loraModels[lm].matches
   ]);
 
-  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const csv = [
+    headers.join(','), 
+    ...rows.map(r => r.map(escapeCSV).join(','))
+  ].join('\n');
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename=${subset}-lora.csv`);
   res.send(csv);
