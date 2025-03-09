@@ -4,6 +4,27 @@ let subset = '';
 document.addEventListener('DOMContentLoaded', () => {
   fetchSubsets();
 });
+document.addEventListener('DOMContentLoaded', () => {
+  const scalingToggle = document.getElementById('scalingToggle');
+  if (scalingToggle) {
+    // Set initial state based on whether it’s checked
+    handleScalingToggle();
+    
+    // Listen for user changes
+    scalingToggle.addEventListener('change', handleScalingToggle);
+  }
+});
+
+function handleScalingToggle() {
+  const scalingToggle = document.getElementById('scalingToggle');
+  if (!scalingToggle) return;
+
+  if (scalingToggle.checked) {
+    document.body.classList.add('scale-images');
+  } else {
+    document.body.classList.remove('scale-images');
+  }
+}
 
 /**
  * Fetches all subsets and initializes the UI.

@@ -32,7 +32,15 @@
     <select id="subset-select" onchange="changeSubset()"></select>
   </div>
 
-  <!-- Progress Bar, etc., same as before -->
+  <!-- NEW SCALING TOGGLE -->
+  <div class="scaling-toggle-container" style="margin-top: 20px;">
+    <label style="cursor:pointer;">
+      <input type="checkbox" id="scalingToggle" checked>
+      Scale Images Past Base Resolution to fit Screen?
+    </label>
+  </div>
+
+  <!-- Progress Bar -->
   <div class="progress-container">
     <div class="progress-bar" id="overall-progress-bar"></div>
     <div class="progress-label" id="progress-label">0/20</div>

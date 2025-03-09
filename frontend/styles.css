@@ -160,6 +160,7 @@ body {
     but will shrink if needed to fit the container.
   - `object-fit: contain;` helps preserve aspect ratio inside the wrapper
 */
+/* Default: do not upscale beyond base resolution */
 .image-wrapper img {
   display: block;
   width: auto;
@@ -170,6 +171,15 @@ body {
   border-radius: 3px;
   margin-bottom: 10px;
 }
+
+/* When .scale-images is on <body>, allow filling container (upscale if bigger) */
+body.scale-images .image-wrapper img {
+  width: 100%;
+  max-width: 100%; /* fully fill the .image-wrapper’s width */
+  height: auto;
+  object-fit: contain; /* still preserve aspect ratio */
+}
+
 
 .image-wrapper button {
   margin-top: 10px;
