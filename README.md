@@ -1,24 +1,50 @@
 # Blind LoRA Elo Ranker
 
-A web application that lets you rank AI-generated images blindly, reducing visual bias while testing different LoRA (LoRA: Low-Rank Adaptation) model variations on the same prompt. By employing an Elo rating system, you can objectively compare images and their underlying LoRA models.
+## What is this?
 
-**Why "Blind"?** Because you rate images without knowing which LoRA they came from, ensuring a fair and unbiased ranking. Over time, the Elo ratings reveal which images (and LoRAs) consistently perform better, helping you refine and select the best models.
+A simple web app that helps you rank AI-generated images using blind comparisons. It removes the bias that comes from knowing which model created an image by:
+
+- Having you compare images without seeing their metadata
+- Using an Elo rating system (like in chess) to rank both images and models
+- Extracting LoRA model information from image metadata for automated analysis
+
+Works with both AI-generated images containing LoRA metadata and regular images.
+
+## How it helps
+
+When comparing images generated with different LoRA models (low-rank adaptation models for Stable Diffusion), it's easy to be influenced by knowing which model made which image. This tool addresses that problem through blind testing.
+
+After enough comparisons, the system will show you:
+
+- Which LoRAs produced images you consistently preferred
+- The relative difference in performance between models (as Elo points)
+- Which specific images scored highest in your rankings
+
+## Practical uses
+
+This tool is particularly useful if you're:
+
+- **Training your own LoRAs** and need to compare different checkpoints or hyperparameter settings
+- **Testing multiple LoRAs** on the same prompt to see which performs best
+- **Evaluating different models** for specific use cases without name bias
+- **Organizing image collections** by subjective quality with a consistent system
 
 ## Key Features
 
-- **Blind Comparison**: Compare image pairs without seeing their associated LoRA models, reducing brand/model bias.
-- **Elo Rating System**: Assigns a chess-like Elo rating to each image, adapting ratings with each comparison.
-- **LoRA Performance Tracking**: Automatically extracts LoRA model details from image metadata to evaluate model-level performance.
-- **Multiple Image Subsets**: Organize images into subsets for focused testing scenarios.
-- **Progress Tracking**: The UI shows how many matches have been made for reliability.
-- **Export Options**: Download results as CSV files for further analysis.
-- **Correlation & Comparison**: Compare LoRA performance across different subsets and view correlation metrics.
+- **Blind Comparison**: Compare pairs of images without seeing what model produced them
+- **Elo Rating System**: Uses chess-style Elo ratings that adjust based on win/loss patterns
+- **LoRA Metadata Extraction**: Automatically pulls model information from image metadata
+- **Subset Organization**: Group related images for more meaningful comparisons (How you decide to categorize subsets is up to you. My preference is for each category to represent images with the same or similar prompts from multiple lora models.)
+- **Progress Tracking**: Shows when you've made enough comparisons for reliable rankings
+- **Export Options**: Download results as CSV files for further analysis (possibly currently bugged)
+- **Cross-Subset Analysis**: Compare how models perform across different prompts or scenarios (extremely useful for multi-concept multi-style loras, or to test the generalization capabilities of a lora on multiple prompts)
+- **Overperformance Metric (OPM)**: Tracks how often a LoRA model exceeds the average rating across different subsets, helping identify consistently strong performers rather than models that just excel in one specific scenario
 
 ## Status
 
-> **Note**: This is an early-stage personal side project. Core functionalities (blind rating, Elo calculation, and LoRA analysis) are stable, but some features, like CSV export and correlation analysis, may have minor bugs. The UI is minimal.
+> **Note**: This is a personal side project with a minimal UI. The core functions (blind rating, Elo calculation, and LoRA analysis) work reliably, but some features like CSV export and correlation analysis may have minor bugs.
 
-Use at your own risk and feel free to contribute or adapt it for your own needs.
+Use at your own risk and feel free to contribute or adapt it for your needs.
 
 ## Prerequisites
 
