@@ -70,18 +70,20 @@ Use at your own risk and feel free to contribute or adapt it for your needs.
 
 ## Organize Images
 
-1. Create an `images` directory at the project root.
-2. Inside `images`, create subdirectories (one per subset).
-3. Place PNG files (with LoRA metadata) in these subdirectories.
+Currently you need to do some manual movement of image files and folder-making to get started. Making this process doable in the UI is on the todo list, but for now:
+
+1. Inside `ai_images` or `normal_images`, create subdirectories for each subset you want. The name doesn't matter, pick what makes sense to you.
+2. For `ai_images` place PNG files (with LoRA metadata) in these subdirectories.
+3. For `normal_images` place images of any common filetype in these subdirectories
 
 Example structure:
 ```
-/images
-    /set1
+/ai_images
+    /heterochromia_prompt
         image1.png
         image2.png
         ...
-    /set2
+    /brown_hair_prompt
         image3.png
         image4.png
         ...
@@ -98,12 +100,17 @@ Example structure:
 2. **Open in Browser**: Go to http://localhost:3000. Select a subset, then start ranking images by clicking on the image you prefer.
 
 3. **Navigation**:
-   - Rate Images: `index.html`
+   - Rate AI Images: `index.html`
    - View Image Rankings: `rankings.html`
    - View LoRA Rankings: `lora-rankings.html`
    - Compare LoRAs Across Subsets: `compare-loras.html`
+## Image Requirements for Normal ratings
 
-## Image Requirements
+- None really, can be any common image type. 
+- You can include AI generated images with metadata here if you want, but the lora/metadata won't be tracked. This is purely for rating the images themselves.
+
+
+## Image Requirements for LoRA ratings
 
 - **PNG Format**: Images must be PNG files.
 - **LoRA Metadata**: The PNG files should contain LoRA model metadata in their parameters for automatic extraction and tracking.
@@ -111,15 +118,16 @@ Example structure:
 ## Tips for Reliable Results
 
 - Aim for at least 5 matches per image to get a minimally reliable rating. More matches = more accuracy.
-- Keep subsets focused on a single prompt or scenario.
-- Compare multiple subsets containing the same LoRAs to get a correlation overview.
-- The "OPC" (OverPerformance Count) metric in the LoRA comparison page helps identify models that outperform subsets' averages.
+- Keep subsets focused so you can do apples to apples comparisons. For example each subset could represent multiple model outputs on a shared prompt or concept.
+- Compare multiple subsets containing the same LoRAs to get a correlation overview. Ex. produce 5 images on a shared prompt of your choice from 5 different loras, then put them in a single subset.
+- The LoRA comparison page helps identify not just which models are "best" overall, but how they perform on specific subsets. 
+- "OPC" (OverPerformance Count) metric is especially useful for identify the most consistently good performers.
 
 ## Data Storage
 
 - Elo ratings and results are stored in `ratings-<subset>.json` files.
-- No external database is required, simplifying setup and portability.
+- No external database is required, simplifying setup and portability. Just npm install, npm start, slap images into folders, and you're good to go.
 
 ## License
 
-This project is available under the MIT License. See the LICENSE file for details.
+This project is available under the MIT License.
