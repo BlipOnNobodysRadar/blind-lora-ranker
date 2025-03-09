@@ -1,0 +1,108 @@
+let currentPair = [];
+let subset = '';
+
+document.addEventListener('DOMContentLoaded', () => {
+  fetchNormalSubsets();
+});
+
+function fetchNormalSubsets() {
+  fetch('/api/normal-subsets')
+    .then(res => res.json())
+    .then(data => {
+      const sel = document.getElementById('normal-subset-select');
+      sel.innerHTML = '';
+      if (data.length === 0) {
+        console.log('No normal subsets found.');
+        return;
+      }
+      data.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s;
+        sel.appendChild(opt);
+      });
+      subset = data[0]; // default
+      updateUIForSubset();
+    })
+    .catch(err => console.error('Error fetching normal subsets:', err));
+}
+
+function updateUIForSubset() {
+  fetchMatch();
+  fetchProgress();
+}
+
+function fetchMatch() {
+  fetch(`/api/normal-match/${subset}`)
+    .then(res => res.json())
+    .then(data => {
+      if (data.error) {
+        document.querySelector('.image-container').innerHTML = `<p>${data.error}</p>`;
+        return;
+      }
+      currentPair = [data.image1, data.image2];
+      document.getElementById('image1').src = `normal-images/${subset}/${currentPair[0]}`;
+      document.getElementById('image2').src = `normal-images/${subset}/${currentPair[1]}`;
+    })
+    .catch(err => console.error('Error fetching normal match:', err));
+}
+
+function fetchProgress() {
+  fetch(`/api/normal-progress/${subset}`)
+    .then(res => res.json())
+    .then(data => {
+      const { minimalMatches } = data;
+      updateProgressBar(minimalMatches);
+    })
+    .catch(err => console.error('Error fetching normal progress:', err));
+}
+
+function updateProgressBar(minimalMatches) {
+  const max = 20;
+  const bar = document.getElementById('overall-progress-bar');
+  const label = document.getElementById('progress-label');
+
+  let displayValue = minimalMatches;
+  let percentage = (displayValue / max) * 100;
+  if (displayValue > max) percentage = 100;
+
+  bar.style.width = percentage + '%';
+  label.textContent = displayValue + (displayValue > max ? '+' : '') + '/20';
+}
+
+function vote(winnerIndex) {
+  if (currentPair.length < 2) return;
+  const winner = currentPair[winnerIndex - 1];
+  const loser = currentPair[winnerIndex === 1 ? 1 : 0];
+
+  fetch(`/api/normal-vote/${subset}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ winner, loser })
+  })
+    .then(res => res.json())
+    .then(() => {
+      fetchMatch();
+      fetchProgress();
+    })
+    .catch(err => console.error('Error recording normal vote:', err));
+}
+
+function changeSubset() {
+  const sel = document.getElementById('normal-subset-select');
+  subset = sel.value;
+  updateUIForSubset();
+}
+
+function confirmDelete(index) {
+  const image = currentPair[index - 1];
+  if (confirm(`Are you sure you want to delete ${image}?`)) {
+    fetch(`/api/normal-image/${subset}/${image}`, { method: 'DELETE' })
+      .then(res => res.json())
+      .then(() => {
+        fetchMatch();
+        fetchProgress();
+      })
+      .catch(err => console.error('Error deleting normal image:', err));
+  }
+}

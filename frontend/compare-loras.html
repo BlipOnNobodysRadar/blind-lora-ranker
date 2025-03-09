@@ -7,13 +7,25 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- Standardized Navigation Bar -->
+  <!-- BEGIN SHARED NAV BAR -->
   <nav class="navigation">
-    <a href="index.html">Rate Images</a>
-    <a href="rankings.html">View Image Elo Rankings</a>
-    <a href="lora-rankings.html">View LoRA Elo Rankings</a>
+    <a href="index.html">Rate AI Images</a>
+    <a href="index-normal.html">Rate Normal Images</a>
+    <a href="rankings.html">AI Image Elo Rankings</a>
+    <a href="rankings-normal.html">Normal Image Elo Rankings</a>
+    <a href="lora-rankings.html">LoRA Elo Rankings</a>
     <a href="compare-loras.html">Compare LoRAs</a>
+
+    <!-- New refresh button -->
+    <button onclick="refreshDirectories()" style="margin-left:15px;">Refresh Directories</button>
+    
+    <!-- Dark mode toggle (on by default) -->
+    <label style="margin-left:15px; cursor:pointer;">
+      <input type="checkbox" id="darkModeToggle" checked>
+      Dark Mode
+    </label>
   </nav>
+  <!-- END SHARED NAV BAR -->
 
   <h1>Compare LoRA Performance Across Subsets</h1>
   
@@ -55,5 +67,6 @@
   </div>
 
   <script src="compare-loras.js"></script>
+  <script src="darkModeScript.js"></script>
 </body>
 </html>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Lora Elo Rankings</title>
+  <title>Normal Image Elo Rankings</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -28,88 +28,80 @@
   <!-- END SHARED NAV BAR -->
 
   <div class="subset-select">
-    <label for="subset">Choose a subset:</label>
+    <label for="subset">Choose a normal subset:</label>
     <select id="subset" onchange="changeSubset()"></select>
   </div>
-  
+
   <div class="controls">
     <div>
-      <label for="search">Search LoRA:</label>
-      <input type="text" id="search" oninput="filterResults()" placeholder="Type to search...">
+      <label for="search">Search Images:</label>
+      <input type="text" id="search" oninput="renderRankings()" placeholder="Type to search...">
     </div>
     <div>
       <button onclick="downloadCSV()">Download CSV</button>
     </div>
   </div>
 
-  <div class="notification" id="notification">
-    All LoRA models have reached the minimum threshold for stable rankings!
-  </div>
-  
-  <h1>Lora Model Elo Rankings</h1>
+  <h1>Normal Image Elo Rankings</h1>
   <div class="summary" id="summary"></div>
 
   <div class="ranking-header" id="ranking-header">
-    <span data-sort="lora">LoRA Model</span>
+    <span data-sort="image">Image</span>
     <span data-sort="matches">Matches</span>
     <span data-sort="rating">Rating</span>
   </div>
-  
+
   <div class="ranking-container" id="ranking-container"></div>
 
   <script>
-    let loraData = [];
+    let rankingsData = [];
     let currentSubset = '';
     let currentSort = { field: 'rating', direction: 'desc' };
 
-    document.addEventListener('DOMContentLoaded', (event) => {
-      fetchSubsets();
+    document.addEventListener('DOMContentLoaded', () => {
+      fetchNormalSubsets();
     });
 
-    function fetchSubsets() {
-      fetch('/api/subsets')
+    function fetchNormalSubsets() {
+      fetch('/api/normal-subsets')
         .then(res => res.json())
         .then(data => {
-          const subsetSelect = document.getElementById('subset');
-          subsetSelect.innerHTML = '';
+          const sel = document.getElementById('subset');
+          sel.innerHTML = '';
+          if (!data || data.length === 0) {
+            console.log('No normal subsets found');
+            return;
+          }
           data.forEach(s => {
             const option = document.createElement('option');
             option.value = s;
             option.textContent = s;
-            subsetSelect.appendChild(option);
+            sel.appendChild(option);
           });
-          const params = new URLSearchParams(window.location.search);
-          currentSubset = params.get('subset') || data[0];
-          subsetSelect.value = currentSubset;
+          currentSubset = data[0];
           fetchRankings(currentSubset);
           fetchSummary(currentSubset);
         })
-        .catch(error => console.error('Error fetching subsets:', error));
+        .catch(err => console.error('Error fetching normal subsets:', err));
     }
 
     function fetchRankings(subset) {
-      fetch(`/api/lora-rankings/${subset}`)
-        .then(response => response.json())
+      fetch(`/api/normal-elo-rankings/${subset}`)
+        .then(res => res.json())
         .then(data => {
-          if (!Array.isArray(data)) {
-            console.error('Unexpected data format:', data);
-            return;
-          }
-          loraData = data;
+          rankingsData = data;
           renderRankings();
         })
-        .catch(error => {
-          console.error('Error fetching rankings:', error);
-        });
+        .catch(err => console.error('Error fetching normal elo rankings:', err));
     }
 
     function fetchSummary(subset) {
-      fetch(`/api/summary/${subset}/lora`)
+      fetch(`/api/summary-normal/${subset}`)
         .then(res => res.json())
         .then(data => {
           const summaryDiv = document.getElementById('summary');
           summaryDiv.innerHTML = `
-            <p>Total LoRA Models: ${data.count}</p>
+            <p>Total Images: ${data.count}</p>
             <p>Average Rating: ${data.averageRating.toFixed(2)}</p>
             <p>Average Matches: ${data.averageMatches.toFixed(2)}</p>
           `;
@@ -118,62 +110,39 @@
     }
 
     function changeSubset() {
-      const subset = document.getElementById('subset').value;
-      window.location.search = `?subset=${subset}`;
+      currentSubset = document.getElementById('subset').value;
+      fetchRankings(currentSubset);
+      fetchSummary(currentSubset);
     }
 
     function renderRankings() {
       sortRankings();
-      const rankingContainer = document.getElementById('ranking-container');
-      rankingContainer.innerHTML = '';
-      const searchTerm = document.getElementById('search').value.toLowerCase();
+      const container = document.getElementById('ranking-container');
+      container.innerHTML = '';
+      const searchTerm = (document.getElementById('search').value || '').toLowerCase();
 
-      let allMinimumReached = true;
-      loraData
-        .filter(item => item.lora.toLowerCase().includes(searchTerm))
+      rankingsData
+        .filter(item => item.image.toLowerCase().includes(searchTerm))
         .forEach(item => {
-          const progressPercentage = Math.min((item.matches / 20) * 100, 100);
-          if (item.matches < 5) {
-            allMinimumReached = false;
-          }
-
-          const rankingItem = document.createElement('div');
-          rankingItem.className = 'ranking-item';
-          rankingItem.innerHTML = `
-            <span><strong>${item.lora}</strong></span>
+          const div = document.createElement('div');
+          div.className = 'ranking-item';
+          div.innerHTML = `
+            <img src="normal-images/${currentSubset}/${item.image}" alt="${item.image}">
+            <span>${item.image} (Matches: ${item.matches})</span>
             <span>Rating: ${item.rating.toFixed(2)}</span>
-            <span>Matches: ${item.matches}</span>
-            <div class="progress-bar-container">
-              <div class="progress-bar-background"></div>
-              <div class="progress-bar" style="width: ${progressPercentage}%;"></div>
-            </div>
           `;
-          rankingContainer.appendChild(rankingItem);
+          container.appendChild(div);
         });
-
-      // Notification
-      const notification = document.getElementById('notification');
-      if (allMinimumReached && loraData.length > 0) {
-        notification.style.display = 'block';
-      } else {
-        notification.style.display = 'none';
-      }
-    }
-
-    function filterResults() {
-      renderRankings();
     }
 
     function sortRankings() {
-      loraData.sort((a, b) => {
+      rankingsData.sort((a, b) => {
         let valA = a[currentSort.field];
         let valB = b[currentSort.field];
-
-        if (currentSort.field === 'lora') {
+        if (currentSort.field === 'image') {
           valA = valA.toLowerCase();
           valB = valB.toLowerCase();
         }
-
         if (valA < valB) return currentSort.direction === 'asc' ? -1 : 1;
         if (valA > valB) return currentSort.direction === 'asc' ? 1 : -1;
         return 0;
@@ -204,7 +173,7 @@
     });
 
     function downloadCSV() {
-      window.location.href = `/api/export/${currentSubset}/lora/csv`;
+      window.location.href = `/api/export-normal/${currentSubset}/csv`;
     }
   </script>
   <script src="darkModeScript.js"></script>

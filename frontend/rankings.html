@@ -3,17 +3,29 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Image Elo Rankings</title>
+  <title>AI Image Elo Rankings</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <!-- Standardized Navigation Bar -->
+  <!-- BEGIN SHARED NAV BAR -->
   <nav class="navigation">
-    <a href="index.html">Rate Images</a>
-    <a href="rankings.html">View Image Elo Rankings</a>
-    <a href="lora-rankings.html">View LoRA Elo Rankings</a>
+    <a href="index.html">Rate AI Images</a>
+    <a href="index-normal.html">Rate Normal Images</a>
+    <a href="rankings.html">AI Image Elo Rankings</a>
+    <a href="rankings-normal.html">Normal Image Elo Rankings</a>
+    <a href="lora-rankings.html">LoRA Elo Rankings</a>
     <a href="compare-loras.html">Compare LoRAs</a>
+
+    <!-- New refresh button -->
+    <button onclick="refreshDirectories()" style="margin-left:15px;">Refresh Directories</button>
+    
+    <!-- Dark mode toggle (on by default) -->
+    <label style="margin-left:15px; cursor:pointer;">
+      <input type="checkbox" id="darkModeToggle" checked>
+      Dark Mode
+    </label>
   </nav>
+  <!-- END SHARED NAV BAR -->
 
   <div class="subset-select">
     <label for="subset">Choose a subset:</label>
@@ -30,7 +42,7 @@
     </div>
   </div>
 
-  <h1>Image Elo Rankings</h1>
+  <h1>AI Image Elo Rankings</h1>
   <div class="summary" id="summary"></div>
   
   <div class="ranking-header" id="ranking-header">
@@ -152,7 +164,6 @@
       if (!e.target.dataset.sort) return;
       const field = e.target.dataset.sort;
       if (field === currentSort.field) {
-        // Toggle direction
         currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
       } else {
         currentSort.field = field;
@@ -165,5 +176,6 @@
       window.location.href = `/api/export/${currentSubset}/images/csv`;
     }
   </script>
+  <script src="darkModeScript.js"></script>
 </body>
 </html>

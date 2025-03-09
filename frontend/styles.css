@@ -325,3 +325,28 @@ th.sort-desc::after {
   height: 100%;
   background: #4caf50;
 }
+
+/* Dark Mode Toggle: .dark-mode on <body> overrides colors */
+body.dark-mode {
+  background-color: #121212;
+  color: #ccc;
+}
+
+/* Darken navigation bar in dark mode */
+body.dark-mode .navigation {
+  background-color: #333;
+}
+
+/* Example for table backgrounds in dark mode */
+body.dark-mode table {
+  background-color: #1e1e1e;
+}
+body.dark-mode th {
+  background-color: #333;
+  color: #ccc;
+}
+body.dark-mode td {
+  color: #ccc;
+}
+
+/* You can add more adjustments as needed for images, links, etc. */

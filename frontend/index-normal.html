@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>AI Image Elo Ranker</title>
+  <title>Normal Image Elo Ranker</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -28,11 +28,10 @@
   <!-- END SHARED NAV BAR -->
 
   <div class="navigation">
-    <label for="subset-select">Select Subset:</label>
-    <select id="subset-select" onchange="changeSubset()"></select>
+    <label for="normal-subset-select">Select Normal Subset:</label>
+    <select id="normal-subset-select" onchange="changeSubset()"></select>
   </div>
 
-  <!-- Progress Bar, etc., same as before -->
   <div class="progress-container">
     <div class="progress-bar" id="overall-progress-bar"></div>
     <div class="progress-label" id="progress-label">0/20</div>
@@ -58,7 +57,7 @@
     </div>
   </div>
 
-  <script src="script.js" defer></script>
+  <script src="script-normal.js" defer></script>
   <script src="darkModeScript.js"></script>
 </body>
 </html>
