@@ -4,6 +4,12 @@ node_modules/
 # Image directories and their contents
 images/
 */images/
+ai_images/
+*/ai_images/
+!/ai_images/defaultSet1
+normal_images/
+*/normal_images/
+!/normal_images/defaultSet1
 
 # Rating JSON files
 ratings-*.json

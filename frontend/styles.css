@@ -1,37 +1,71 @@
-/* General Styles */
+/* Reset body margins/padding so navbar is flush at the top */
 body {
-  font-family: Arial, sans-serif;
   margin: 0;
-  padding: 20px;
+  padding: 0;
+  font-family: Arial, sans-serif;
   text-align: center;
   box-sizing: border-box;
-  max-width: 100vw;
-  background: #fafafa;
+  background: #f2f2f2; /* Slightly darker than white, for normal mode */
   color: #333;
+  max-width: 100vw; /* Keep it from overflowing horizontally */
 }
 
-a {
-  margin: 0 10px;
+/* Navigation bar container */
+.navigation {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-wrap: wrap;
+  background: #e0e0e0;
+  padding: 10px;
+  margin: 0; /* Ensure no gap at top */
+}
+
+/* Navigation links */
+.navigation a {
+  margin: 5px 15px;
+  font-weight: bold;
   text-decoration: none;
   color: #007acc;
 }
 
-a:hover {
+.navigation a:hover {
   text-decoration: underline;
 }
 
-.navigation {
-  display: flex;
-  justify-content: center;
-  flex-wrap: wrap;
-  background: #f0f0f0;
-  padding: 10px;
-  margin-bottom: 20px;
+/* Style for the Refresh Directories button in the nav */
+.navigation button {
+  margin-left: 15px;
+  padding: 6px 12px;
+  background-color: #007acc;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.navigation button:hover {
+  background-color: #005a99;
 }
 
-.navigation a {
-  margin: 5px 15px;
-  font-weight: bold;
+/* Dark mode toggle label styling */
+.navigation label {
+  margin-left: 15px;
+  cursor: pointer;
+  color: #333; /* Normal mode color */
+}
+
+/* Subset dropdown select styling */
+.navigation select {
+  margin-left: 8px;
+  padding: 6px;
+  background-color: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.navigation select:focus {
+  outline: none;
+  border-color: #007acc;
 }
 
 /* Progress Bar */
@@ -89,21 +123,24 @@ a:hover {
 
 /* Threshold Positions */
 .threshold-minimum { left: 25%; }  /* 5/20 = 25% */
-.threshold-decent { left: 50%; }   /* 10/20 = 50% */
-.threshold-good { left: 100%; }    /* 20/20 = 100% */
+.threshold-decent  { left: 50%; }  /* 10/20 = 50% */
+.threshold-good    { left: 100%; } /* 20/20 = 100% */
 
-/* Image Container */
+/* Container around both images */
 .image-container {
   display: flex;
   justify-content: center;
   align-items: flex-start;
   flex-wrap: wrap;
   gap: 20px;
-  margin-top: 50px;
+  margin: 20px auto;
+  background: #eaeaea;
+  padding: 20px;
+  border-radius: 5px;
+  max-width: 1200px; /* Adjust as needed */
 }
 
-
-/* Each image wrapper can take up to around half the container width on larger screens */
+/* Wrapper for each individual image and its button */
 .image-wrapper {
   flex: 0 1 45%;
   display: flex;
@@ -116,12 +153,18 @@ a:hover {
   box-sizing: border-box;
 }
 
-/* Images will fill the width of their container, and scale down as needed,
-   while preserving aspect ratio. */
+/*
+  The images themselves:
+  - `width: auto; max-width: 100%; height: auto;`
+    ensures the image does not upscale beyond its actual resolution,
+    but will shrink if needed to fit the container.
+  - `object-fit: contain;` helps preserve aspect ratio inside the wrapper
+*/
 .image-wrapper img {
-  width: 100%;
+  display: block;
+  width: auto;
+  max-width: 100%;
   height: auto;
-  max-height: calc(100vh - 250px); /* Adjust this if needed */
   object-fit: contain;
   border: 1px solid #ddd;
   border-radius: 3px;
@@ -130,13 +173,13 @@ a:hover {
 
 .image-wrapper button {
   margin-top: 10px;
-  padding: 5px 10px;
+  padding: 6px 12px;
   background: #c00;
   color: #fff;
   border: none;
   border-radius: 3px;
+  cursor: pointer;
 }
-
 .image-wrapper button:hover {
   background: #900;
 }
@@ -198,7 +241,6 @@ a:hover {
   border-radius: 3px;
   cursor: pointer;
 }
-
 .controls button:hover {
   background: #005a99;
   border-color: #005a99;
@@ -326,7 +368,7 @@ th.sort-desc::after {
   background: #4caf50;
 }
 
-/* Dark Mode Toggle: .dark-mode on <body> overrides colors */
+/* DARK MODE OVERRIDES */
 body.dark-mode {
   background-color: #121212;
   color: #ccc;
@@ -337,7 +379,63 @@ body.dark-mode .navigation {
   background-color: #333;
 }
 
-/* Example for table backgrounds in dark mode */
+/* Darken nav links */
+body.dark-mode .navigation a {
+  color: #ccc;
+}
+body.dark-mode .navigation a:hover {
+  text-decoration: underline;
+}
+
+/* Dark mode for the refresh button */
+body.dark-mode .navigation button {
+  background-color: #555;
+  color: #ccc;
+}
+body.dark-mode .navigation button:hover {
+  background-color: #777;
+}
+
+/* Dark mode for subset dropdown */
+body.dark-mode .navigation select {
+  background-color: #555;
+  color: #ccc;
+  border: 1px solid #444;
+}
+
+/* Dark mode for the second .navigation bar (the subset selection) */
+body.dark-mode label[for="normal-subset-select"] {
+  color: #ccc;
+}
+
+/* Dark mode for image container background */
+body.dark-mode .image-container {
+  background: #1e1e1e;
+}
+
+/* Dark mode for each image wrapper */
+body.dark-mode .image-wrapper {
+  background: #2e2e2e;
+  border: 1px solid #444;
+}
+
+/* Dark mode for the images themselves (borders) */
+body.dark-mode .image-wrapper img {
+  border-color: #555;
+}
+
+/* Buttons inside image wrapper in dark mode */
+body.dark-mode .image-wrapper button {
+  background: #900;
+}
+
+/* Ranking containers in dark mode */
+body.dark-mode .ranking-item {
+  background: #2e2e2e;
+  border: 1px solid #444;
+}
+
+/* Tables in dark mode */
 body.dark-mode table {
   background-color: #1e1e1e;
 }
@@ -349,4 +447,13 @@ body.dark-mode td {
   color: #ccc;
 }
 
-/* You can add more adjustments as needed for images, links, etc. */
+/* Summaries, notifications, etc. in dark mode */
+body.dark-mode .summary {
+  background: #2e2e2e;
+  border: 1px solid #444;
+}
+body.dark-mode .notification {
+  background-color: #333;
+  border-color: #666;
+  color: #ccc;
+}
