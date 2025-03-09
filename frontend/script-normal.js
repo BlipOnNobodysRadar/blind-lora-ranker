@@ -29,7 +29,7 @@ function fetchNormalSubsets() {
 document.addEventListener('DOMContentLoaded', () => {
   const scalingToggle = document.getElementById('scalingToggle');
   if (scalingToggle) {
-    // Set initial state based on whether it’s checked
+    // Set initial state based on whether it's checked
     handleScalingToggle();
     
     // Listen for user changes
@@ -89,6 +89,21 @@ function updateProgressBar(minimalMatches) {
 
   bar.style.width = percentage + '%';
   label.textContent = displayValue + (displayValue > max ? '+' : '') + '/20';
+  
+  // Set the color based on progress thresholds
+  if (minimalMatches < 5) {
+    // Below minimum threshold - Red
+    bar.style.backgroundColor = '#ff3333';
+  } else if (minimalMatches < 10) {
+    // Between minimum and decent - Orange
+    bar.style.backgroundColor = '#ff7700';
+  } else if (minimalMatches < 20) {
+    // Between decent and good - Yellow
+    bar.style.backgroundColor = '#ffcc00';
+  } else {
+    // At or above good threshold - Green
+    bar.style.backgroundColor = '#4caf50';
+  }
 }
 
 function vote(winnerIndex) {
