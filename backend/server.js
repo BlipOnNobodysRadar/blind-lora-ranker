@@ -224,6 +224,8 @@ function getPngMetadata(imagePath) {
       if (loraMatch && loraMatch[1]) {
         return loraMatch[1].trim();
       }
+      // If parameters chunk exists but no LoRA was found, explicitly return "NONE"
+      return "NONE";
     }
 
     // 2. ComfyUI format in 'prompt'
@@ -233,6 +235,7 @@ function getPngMetadata(imagePath) {
         const jsonData = JSON.parse(promptChunk.text);
         const loraName = extractLoraFromComfyUI(jsonData);
         if (loraName) return loraName;
+        return "NONE";
       } catch {}
     }
 
@@ -243,6 +246,7 @@ function getPngMetadata(imagePath) {
         const jsonData = JSON.parse(workflowChunk.text);
         const loraName = extractLoraFromWorkflow(jsonData);
         if (loraName) return loraName;
+        return "NONE";
       } catch {}
     }
 
