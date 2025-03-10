@@ -81,15 +81,77 @@ body {
   overflow: hidden;
   border: 1px solid #ccc;
 }
+
+/* Main progress bar that will show total width */
 .progress-bar {
   position: absolute;
   top: 0;
   left: 0;
   height: 100%;
   width: 0;
-  transition: width 0.5s, background-color 0.5s;
-  /* Color will be set by JavaScript */
+  transition: width 0.5s, background 0.5s;
+  /* Add a purple right edge using a linear gradient */
+  background-image: linear-gradient(to right, 
+    transparent, 
+    transparent 96%, 
+    rgba(128, 0, 128, 1) 96%, 
+    rgba(128, 0, 128, 1) 100%
+  );
+  background-size: 100% 100%;
+  /* The base background color will be set by JavaScript */
+  z-index: 1; /* Above sections but below label */
 }
+
+/* Section labels inside the progress bar */
+.section-labels {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  pointer-events: none;
+}
+
+.section-label {
+  height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 11px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.9);
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.7);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.section-not-reliable {
+  width: 25%; /* 0-5/20 = 0-25% */
+  background-color: rgba(204, 41, 41, 0.9); /* Darker red */
+}
+
+.section-minimum {
+  width: 25%; /* 5-10/20 = 25-50% */
+  background-color: rgba(204, 97, 0, 0.9); /* Darker orange */
+}
+
+.section-decent {
+  width: 50%; /* 10-20/20 = 50-100% */
+  background-color: rgba(204, 165, 0, 0.9); /* Darker yellow */
+}
+
+.section-good {
+  /* This section is absolute positioned to avoid affecting layout */
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
+  width: 25%; /* Fixed width */
+  background-color: rgba(61, 140, 64, 0.9); /* Darker green */
+  display: none; /* Hidden by default, shown via JS */
+}
+
 .progress-label {
   position: absolute;
   top: 0;
@@ -102,7 +164,8 @@ body {
   font-weight: bold;
   pointer-events: none;
   color: #333;
-  text-shadow: 0px 0px 2px rgba(255, 255, 255, 0.7); /* Make text readable on all color backgrounds */
+  text-shadow: 0px 0px 2px rgba(255, 255, 255, 0.7);
+  z-index: 2; /* Place on top of section labels */
 }
 
 .threshold {
@@ -111,6 +174,7 @@ body {
   width: 2px;
   height: 100%;
   background: black;
+  z-index: 3; /* Place on top of everything */
 }
 .threshold-label {
   position: absolute;

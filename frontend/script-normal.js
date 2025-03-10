@@ -90,19 +90,37 @@ function updateProgressBar(minimalMatches) {
   bar.style.width = percentage + '%';
   label.textContent = displayValue + (displayValue > max ? '+' : '') + '/20';
   
-  // Set the color based on progress thresholds
+  // Base color based on progress thresholds
+  let baseColor;
   if (minimalMatches < 5) {
     // Below minimum threshold - Red
-    bar.style.backgroundColor = '#ff3333';
+    baseColor = 'rgba(204, 41, 41, 0.7)'; // Darker semi-transparent red
   } else if (minimalMatches < 10) {
     // Between minimum and decent - Orange
-    bar.style.backgroundColor = '#ff7700';
+    baseColor = 'rgba(204, 97, 0, 0.7)'; // Darker semi-transparent orange
   } else if (minimalMatches < 20) {
     // Between decent and good - Yellow
-    bar.style.backgroundColor = '#ffcc00';
+    baseColor = 'rgba(204, 165, 0, 0.7)'; // Darker semi-transparent yellow
   } else {
     // At or above good threshold - Green
-    bar.style.backgroundColor = '#4caf50';
+    baseColor = 'rgba(61, 140, 64, 0.7)'; // Darker semi-transparent green
+  }
+  
+  // Set the background with both the base color and the purple edge gradient
+  bar.style.backgroundImage = `linear-gradient(to right, 
+    ${baseColor}, 
+    ${baseColor} 96%, 
+    rgba(128, 0, 128, 1) 96%, 
+    rgba(128, 0, 128, 1) 100%)`;
+
+  // Show/hide the "Good" section based on progress
+  const goodSection = document.querySelector('.section-good');
+  if (goodSection) {
+    if (displayValue >= max) {
+      goodSection.style.display = 'flex'; // Show the good section
+    } else {
+      goodSection.style.display = 'none'; // Hide the good section
+    }
   }
 }
 
