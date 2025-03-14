@@ -220,9 +220,12 @@ function getPngMetadata(imagePath) {
     // 1. Auto1111 format
     const parametersChunk = textChunks.find(c => c.keyword === 'parameters');
     if (parametersChunk) {
-      const loraMatch = parametersChunk.text.match(/<lora:([^:]+):/);
+      // Updated regex to capture both name and strength
+      const loraMatch = parametersChunk.text.match(/<lora:([^:]+):([^>]+)>/);
       if (loraMatch && loraMatch[1]) {
-        return loraMatch[1].trim();
+        const loraName = loraMatch[1].trim();
+        const loraStrength = loraMatch[2] || ""; // Get the strength value
+        return loraName + (loraStrength ? `:${loraStrength}` : ""); // Return name:strength format
       }
       // If parameters chunk exists but no LoRA was found, explicitly return "NONE"
       return "NONE";
