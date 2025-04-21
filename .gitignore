@@ -5,11 +5,12 @@ node_modules/
 AI_images/*
 !AI_images/
 !AI_images/defaultAISubset/
+!AI_images/.gitkeep
 
 normal_images/*
 !normal_images/
 !normal_images/defaultNormalSubset/
-
+!normal_images/.gitkeep
 
 # Rating JSON files
 ratings-*.json
