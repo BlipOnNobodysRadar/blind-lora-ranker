@@ -18,7 +18,7 @@
 
     <!-- New refresh button -->
     <button onclick="refreshDirectories()" style="margin-left:15px;">Refresh Directories</button>
-    
+
     <!-- Dark mode toggle (on by default) -->
     <label for="darkModeToggle" style="margin-left:15px; cursor:pointer;">
       <input type="checkbox" id="darkModeToggle" checked>
@@ -30,6 +30,7 @@
   <div class="navigation">
     <label for="subset-select">Select Subset:</label>
     <select id="subset-select" onchange="changeSubset()"></select>
+     <span id="image-count-status"></span> <!-- Added span for image counts -->
   </div>
 
   <!-- NEW SCALING TOGGLE -->
@@ -40,37 +41,56 @@
     </label>
   </div>
 
-  <!-- Progress Bar -->
-  <div class="progress-container">
-    <div class="section-labels">
-      <div class="section-label section-not-reliable">Not Reliable</div>
-      <div class="section-label section-minimum">Minimum</div>
-      <div class="section-label section-decent">Decent</div>
-      <div class="section-label section-good">Good</div>
+   <!-- NEW: Seeding Gallery Container (Initially Hidden) -->
+   <div id="seeding-gallery" style="display: none;">
+        <h1>Seed Initial Image Ratings</h1>
+        <p>Please give each image a rating from 1 to 10 stars. This will set its initial Elo score (700-1600).</p>
+        <div id="image-seeding-cards" class="image-container">
+            <!-- Image cards will be dynamically inserted here -->
+        </div>
+        <button id="confirm-seeding" onclick="confirmSeedRatings()" disabled>Confirm Seed Ratings</button>
+        <div id="seeding-message" style="margin-top: 10px; color: green;"></div> <!-- Message area -->
+   </div>
+
+  <!-- Existing: Head-to-Head UI Container (Initially Hidden) -->
+  <div id="head-to-head-ui" style="display: none;">
+    <!-- Progress Bar -->
+    <div class="progress-container">
+      <div class="section-labels">
+        <div class="section-label section-not-reliable">Not Reliable</div>
+        <div class="section-label section-minimum">Minimum</div>
+        <div class="section-label section-decent">Decent</div>
+        <div class="section-label section-good">Good</div>
+      </div>
+      <div class="progress-bar" id="overall-progress-bar"></div>
+      <div class="progress-label" id="progress-label">0/20</div>
+      <div class="threshold threshold-minimum">
+        <span class="threshold-label">5 (minimum)</span>
+      </div>
+      <div class="threshold threshold-decent">
+        <span class="threshold-label">10 (decent)</span>
+      </div>
+      <div class="threshold threshold-good">
+        <span class="threshold-label">20 (good)</span>
+      </div>
     </div>
-    <div class="progress-bar" id="overall-progress-bar"></div>
-    <div class="progress-label" id="progress-label">0/20</div>
-    <div class="threshold threshold-minimum">
-      <span class="threshold-label">5 (minimum)</span>
+
+    <div class="image-container">
+      <div class="image-wrapper">
+        <img id="image1" src="" alt="Image 1" onclick="vote(1)">
+        <button onclick="confirmDelete(1)">Delete Image 1</button>
+      </div>
+      <div class="image-wrapper">
+        <img id="image2" src="" alt="Image 2" onclick="vote(2)">
+        <button onclick="confirmDelete(2)">Delete Image 2</button>
+      </div>
     </div>
-    <div class="threshold threshold-decent">
-      <span class="threshold-label">10 (decent)</span>
-    </div>
-    <div class="threshold threshold-good">
-      <span class="threshold-label">20 (good)</span>
+    <!-- Add Draw button -->
+    <div style="margin-top: 20px;">
+        <button onclick="voteDraw()">Draw</button>
     </div>
   </div>
 
-  <div class="image-container">
-    <div class="image-wrapper">
-      <img id="image1" src="" alt="Image 1" onclick="vote(1)">
-      <button onclick="confirmDelete(1)">Delete Image 1</button>
-    </div>
-    <div class="image-wrapper">
-      <img id="image2" src="" alt="Image 2" onclick="vote(2)">
-      <button onclick="confirmDelete(2)">Delete Image 2</button>
-    </div>
-  </div>
 
   <script src="script.js" defer></script>
   <script src="darkModeScript.js"></script>

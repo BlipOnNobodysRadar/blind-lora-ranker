@@ -201,6 +201,7 @@ body {
   max-width: 95vw;      /* Fill most of screen width, no strict px limit */
   justify-content: center;
   align-items: flex-start;
+  height:70vh;
 }
 
 .image-wrapper {
@@ -213,6 +214,7 @@ body {
   padding: 10px;
   border-radius: 5px;
   box-sizing: border-box;
+  height:100%;
 }
 
 /* Default: no upscaling past base resolution, aspect ratio preserved */
@@ -225,6 +227,7 @@ body {
   border: 1px solid #ddd;
   border-radius: 3px;
   margin-bottom: 10px;
+  max-height: 87%;
 }
 
 /* If "Scale Images" toggle is ON, fill container (even if it upscales) */
@@ -523,4 +526,211 @@ body.dark-mode .notification {
   background-color: #333;
   border-color: #666;
   color: #ccc;
+}
+
+/* ---------------------
+Star rating section 
+------------------------*/
+/* frontend/styles.css */
+
+/* ... (previous styles remain) ... */
+
+/* Add this section or modify the existing one */
+/* Seeding Gallery Styles */
+
+/* Override .image-container for the gallery view */
+#seeding-gallery #image-seeding-cards.image-container {
+  flex-direction: row; /* Arrange images in rows */
+  justify-content: center;
+  align-items: flex-start; /* Align items to the top */
+  gap: 20px; /* Increased gap for better spacing */
+  padding: 20px; /* Match padding of regular container */
+  background: none; /* Remove background */
+  border: none; /* Remove border */
+  max-width: 100vw; /* Allow it to take full width */
+  box-sizing: border-box; /* Include padding in width calculation */
+}
+
+/* Style individual image cards in the seeding gallery */
+#seeding-gallery #image-seeding-cards .image-wrapper {
+ /* Removed fixed flex-basis/width to allow more flexibility */
+ flex: 1 1 30%; /* Allow growth (1), shrinking (1), minimum width (250px) */
+ max-width: 45%; /* Maximum width per card */
+ flex-direction: column; /* Stack image, name, stars */
+ align-items: center;
+ background: #fff; /* White background for cards */
+ border: 1px solid #ccc;
+ padding: 10px;
+ border-radius: 5px;
+ box-sizing: border-box;
+ text-align: center;
+ overflow: hidden;
+}
+
+body.dark-mode #seeding-gallery #image-seeding-cards .image-wrapper {
+ background: #2e2e2e; /* Dark mode background */
+ border: 1px solid #444;
+}
+
+
+#seeding-gallery #image-seeding-cards .image-wrapper img {
+ width: 100%; /* Image fills the width of its parent wrapper */
+ max-width: 100%; /* Ensure it doesn't exceed parent width */
+ height: auto; /* Maintain aspect ratio */
+ object-fit: contain;
+ border: 1px solid #ddd;
+ border-radius: 3px;
+ margin-bottom: 5px; /* Space below image */
+ /* Remove the JS style override for max-width */
+}
+
+body.dark-mode #seeding-gallery #image-seeding-cards .image-wrapper img {
+ border-color: #555;
+}
+
+#seeding-gallery #image-seeding-cards .image-wrapper p {
+ /* Style for the image name */
+  margin-top: 5px;
+  margin-bottom: 5px;
+  word-break: break-word; /* Allow breaking long words */
+  overflow-wrap: break-word; /* Alias for word-break */
+  font-size: 0.9em;
+  color: #555; /* Default name color */
+}
+body.dark-mode #seeding-gallery #image-seeding-cards .image-wrapper p {
+ color: #bbb; /* Dark mode name color */
+}
+
+
+/* Star Rating Styles (Refined for Containment and Centering) */
+#seeding-gallery #image-seeding-cards .star-rating {
+ direction: rtl; /* Make stars appear left-to-right visually */
+ display: inline-block; /* Or block, combined with text-align center */
+ font-size: 25px; /* Adjust size as needed */
+ margin-top: 5px;
+ /* Ensure rating container has width/centering */
+ width: 100%; /* Take full width of parent wrapper */
+ text-align: center; /* Center the inline-block stars */
+  white-space: nowrap; /* Prevent stars from wrapping */
+  overflow: hidden; /* Hide any overflow */
+  margin-bottom: 0; /* Remove bottom margin */
+}
+
+.star-rating input {
+ display: none; /* Hide radio buttons */
+}
+
+.star-rating label {
+ color: #888; /* Default star color */
+ cursor: pointer;
+ padding: 0 2px; /* Keep padding between stars */
+  transition: color 0.2s ease; /* Smooth color transition */
+}
+
+/* Style for hover state and selected stars */
+.star-rating input:checked ~ label,
+.star-rating label:hover,
+.star-rating label:hover ~ label {
+ color: gold; /* Highlight color */
+}
+
+/* Reset hover for the checked star and those after it */
+.star-rating input:checked + label:hover,
+.star-rating input:checked ~ label:hover,
+.star-rating input:checked ~ label:hover ~ label,
+.star-rating label:hover ~ input:checked ~ label {
+ color: gold; /* Keep highlight */
+}
+
+/* Specific style for the currently selected star and those before it */
+.star-rating input:checked ~ label {
+ color: gold;
+}
+
+/* Dark mode overrides for stars */
+body.dark-mode .star-rating label {
+  color: #555; /* Default star color in dark mode */
+}
+body.dark-mode .star-rating input:checked ~ label,
+body.dark-mode .star-rating label:hover,
+body.dark-mode .star-rating label:hover ~ label {
+ color: #ffeb3b; /* Yellowish highlight in dark mode */
+}
+
+
+/* Hide delete button in seeding view */
+#seeding-gallery #image-seeding-cards .image-wrapper button {
+  display: none;
+}
+
+
+/* Style the confirm seeding button */
+#confirm-seeding {
+ margin-top: 20px;
+ padding: 10px 20px;
+ font-size: 1.1em;
+ background-color: #4CAF50; /* Green */
+ color: white;
+ border: none;
+ border-radius: 5px;
+ cursor: pointer;
+ transition: background-color 0.2s ease;
+}
+#confirm-seeding:hover:not(:disabled) {
+ background-color: #45a049;
+}
+#confirm-seeding:disabled {
+ background-color: #ccc;
+ cursor: not-allowed;
+}
+
+/* Dark mode for seeding elements */
+body.dark-mode #confirm-seeding:not(:disabled) {
+  background-color: #3f51b5; /* Indigo */
+}
+body.dark-mode #confirm-seeding:hover:not(:disabled) {
+  background-color: #303f9f; /* Darker Indigo */
+}
+body.dark-mode #confirm-seeding:disabled {
+  background-color: #555;
+}
+
+#seeding-message {
+ margin-top: 10px;
+ font-weight: bold;
+}
+
+/* Style for the image inside the seeding gallery card */
+#seeding-gallery #image-seeding-cards .image-wrapper img {
+  /* Existing styles */
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  object-fit: contain;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  margin-bottom: 5px;
+
+  /* Add transition for smoother zoom effect */
+  transition: transform 0.2s ease-out; /* Transition scale and origin */
+  transform-origin: center center; /* Default origin */
+  transform: scale(1); /* Default scale */
+
+  /* Ensure the image is display: block to avoid extra space below it */
+  display: block;
+  cursor: crosshair; /* Change cursor to indicate zoomability */
+}
+
+/* Style when the image is hovered (or parent wrapper) */
+#seeding-gallery #image-seeding-cards .image-wrapper:hover img {
+  transform: scale(2.5); /* Zoom factor - adjust as needed */
+  /* transform-origin will be set by JavaScript on mousemove */
+}
+
+
+/* Optional: styles for the image name and stars to ensure they stay below */
+#seeding-gallery #image-seeding-cards .image-wrapper p,
+#seeding-gallery #image-seeding-cards .image-wrapper .star-rating {
+   position: relative; /* Ensure they stack below the image even when it zooms */
+   z-index: 1; /* Make sure they are above the zoomed part of the image */
 }
