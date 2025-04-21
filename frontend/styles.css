@@ -21,7 +21,6 @@ body {
   align-items: center;
   flex-wrap: wrap;
   background: #e0e0e0;
-  padding: 10px;
   margin: 0; /* Ensure no gap at the very top */
 }
 
@@ -74,9 +73,9 @@ body {
   position: relative;
   width: 80%;
   max-width: 600px;
-  height: 30px;
+  height: 20px;
   background: #eee;
-  margin: 20px auto;
+  margin: 10px auto;
   border-radius: 5px;
   overflow: hidden;
   border: 1px solid #ccc;
@@ -194,14 +193,14 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: 20px;
-  margin: 20px auto;
+  margin: 10px auto;
   padding: 20px;
   background: #eaeaea;
   border-radius: 5px;
   max-width: 95vw;      /* Fill most of screen width, no strict px limit */
   justify-content: center;
   align-items: flex-start;
-  height:70vh;
+  height:83vh;
 }
 
 .image-wrapper {
