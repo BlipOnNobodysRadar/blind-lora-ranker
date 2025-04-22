@@ -11,6 +11,7 @@ body {
   color: #333;
   max-width: 100vw; /* Prevent horizontal scrolling if content overflows */
   padding-bottom: 40px; /* Add padding at the very bottom of the page */
+  overflow-x:hidden;
 }
 
 /* ------------------------------------------------------------------
@@ -214,7 +215,8 @@ body {
   padding: 7px;
   border-radius: 5px;
   box-sizing: border-box;
-  overflow: hidden;
+  overflow: hidden; /* Crucial to clip the zoomed image */
+  position: relative; /* Needed for potential absolute positioning or z-index */
   max-height: 83vh;
   position:relative;
 }
@@ -225,19 +227,23 @@ body {
   /* ... existing styles ... */
   max-height: 95%; /* Keep max-height for head-to-head */
   max-width: 100%;
-  /* Base styles for zoom effect */
-  transition: transform 0.2s ease-out;
-  transform-origin: center center;
   transform: scale(1);
-  cursor: crosshair; /* Indicate zoom */
-  display: block;
+  display: block; /* Prevents extra space below image */
+  cursor: crosshair; /* Indicate zoom interaction */
+  transform-origin: center center; /* Default origin */
+  transform: scale(1); /* Start at normal size */
+  transition: transform 0.15s ease-out; /* Smooth transition for scale */
+  will-change: transform; /* Hint for browser optimization */
+  pointer-events: auto;
 }
 
-.image-wrapper img:hover {
-  transform: scale(2); /* Adjust scale factor if needed */
-  /* transform-origin is set by JS */
-  z-index: 0; /* Ensure zoomed image is on top */
-  position: relative; /* Needed for z-index to work reliably */
+/* Style when zoom is active (class added by JS) */
+.image-wrapper img.zooming {
+  /* No specific style needed here now, scale is set via inline style */
+}
+
+.image-wrapper:hover img {
+  z-index: 10; /* Bring hovered image's wrapper content forward */
 }
 
 /* If "Scale Images" toggle is ON, fill container (even if it upscales) */
@@ -767,13 +773,14 @@ body.dark-mode #confirm-seeding:disabled {
 
 
 /* Optional: styles for the image name and stars to ensure they stay below */
-#seeding-gallery #image-seeding-cards .image-wrapper p,
-#seeding-gallery #image-seeding-cards .image-wrapper .star-rating {
-   position: relative; /* Ensure they stack below the image even when it zooms */
-   z-index: 1; /* Make sure they are above the zoomed part of the image */
-  /* Prevent text selection during zoom interaction */
-  user-select: none;
-  -webkit-user-select: none; /* Safari */
-  -moz-user-select: none; /* Firefox */
-  -ms-user-select: none; /* IE */
+#seeding-gallery .image-wrapper p,
+#seeding-gallery .image-wrapper .star-rating,
+#seeding-gallery .image-wrapper button {
+   position: relative; /* Keep stacking context */
+   z-index: 11; /* Stay above potentially overlapping zoomed image background */
+   /* Prevent text selection during zoom interaction */
+   user-select: none;
+   -webkit-user-select: none;
+   -moz-user-select: none;
+   -ms-user-select: none;
 }

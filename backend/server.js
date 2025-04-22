@@ -47,6 +47,14 @@ app.use('/images', express.static(AI_IMAGES_DIR));
 // Serve normal images at /normal-images
 app.use('/normal-images', express.static(NORMAL_IMAGES_DIR));
 
+// --- Fisher-Yates shuffle function ---
+function shuffleArray(array) {
+  for (let i = array.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [array[i], array[j]] = [array[j], array[i]]; // Swap elements
+  }
+}
+
 /**
  * Loads all subsets from the AI_IMAGES_DIR (i.e. LoRA images).
  */
@@ -755,9 +763,11 @@ app.get('/api/normal-match/:subset', (req, res) => {
 
   if (check.requiresSeeding) {
        if (check.uninitializedImages.length === 0) {
-           // Should not happen if requiresSeeding is true
            return res.status(400).json({ error: 'No uninitialized images found, but seeding required flag is true.' });
        }
+      // *** SHUFFLE the list before sending ***
+      shuffleArray(check.uninitializedImages);
+      // ***************************************
       return res.json({ requiresSeeding: true, uninitializedImages: check.uninitializedImages });
   }
 
