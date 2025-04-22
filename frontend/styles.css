@@ -201,7 +201,7 @@ body {
   max-width: 95vw;      /* Fill most of screen width, no strict px limit */
   justify-content: space-around;
   align-items: stretch;
-  max-height:83vh;
+  /* max-height:83vh; */
 }
 
 .image-wrapper {
