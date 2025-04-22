@@ -364,10 +364,10 @@ function renderSeedingGallery(images) {
       imgElement.alt = image;
       imgElement.loading = 'lazy'; // Add lazy loading
 
-      const nameElement = document.createElement('p');
-      nameElement.textContent = image;
-      nameElement.style.wordBreak = 'break-all';
-      nameElement.style.overflowWrap = 'break-word';
+      // const nameElement = document.createElement('p');
+      // nameElement.textContent = image;
+      // nameElement.style.wordBreak = 'break-all';
+      // nameElement.style.overflowWrap = 'break-word';
 
       const ratingDiv = document.createElement('div');
       ratingDiv.className = 'star-rating';
@@ -391,13 +391,13 @@ function renderSeedingGallery(images) {
       }
 
       imageWrapper.appendChild(imgElement);
-      imageWrapper.appendChild(nameElement);
+      // imageWrapper.appendChild(nameElement);
       imageWrapper.appendChild(ratingDiv);
 
-      // Add event listeners for zoom effect to the wrapper
-      imageWrapper.addEventListener('mouseenter', handleImageZoomEnter);
-      imageWrapper.addEventListener('mouseleave', handleImageZoomLeave);
-      imgElement.addEventListener('mousemove', handleImageZoomMove);
+      // --- Attach Zoom listeners DIRECTLY to the image ---
+      imgElement.addEventListener('mouseenter', handleImageZoomEnter); // Now on img
+      imgElement.addEventListener('mouseleave', handleImageZoomLeave); // Now on img
+      imgElement.addEventListener('mousemove', handleImageZoomMove);   // Still on img
 
 
       // Delete button is hidden in seeding view (kept structurally for consistency perhaps)
@@ -418,21 +418,20 @@ function renderSeedingGallery(images) {
 // --- Zoom Effect Functions ---
 
 function handleImageZoomEnter(event) {
-  const wrapper = event.currentTarget; // Get the wrapper div
-  const img = wrapper.querySelector('img');
-  if (img) {
-      // The CSS :hover rule on the *wrapper* handles the initial transform scale
-      // We only need mousemove for origin
+  const img = event.target; // Target is now the image itself
+  if (img && img.tagName === 'IMG') {
+      // CSS :hover on img handles the scaling now
+      // We might not even need this listener anymore if CSS handles it all,
+      // but keep it for potential future use or if CSS alone isn't enough.
   }
 }
 
 function handleImageZoomLeave(event) {
-  const wrapper = event.currentTarget; // Get the wrapper div
-  const img = wrapper.querySelector('img');
-  if (img) {
-      // Reset transform-origin when leaving the wrapper
+  const img = event.target; // Target is now the image itself
+  if (img && img.tagName === 'IMG') {
+      // Reset transform-origin when mouse leaves the image
       img.style.transformOrigin = 'center center';
-      // The CSS :hover rule on the wrapper will handle the transform scale resetting
+      // CSS :hover ending handles the scale reset
   }
 }
 
@@ -587,18 +586,15 @@ function displayMatch() {
         return;
    }
 
-   // Clear previous content and ensure structure is correct
+   // Re-create the HTML structure
    headToHeadContainer.innerHTML = `
        <div class="image-wrapper">
          <img id="image1" src="" alt="Image 1">
-         <button onclick="confirmDelete(1)">Delete Image 1</button>
-       </div>
-       <div style="margin-top: 20px;">
-         <button onclick="voteDraw()">Draw</button>
+         <button>Delete Image 1</button> <!-- Simplified button for example -->
        </div>
        <div class="image-wrapper">
          <img id="image2" src="" alt="Image 2">
-         <button onclick="confirmDelete(2)">Delete Image 2</button>
+         <button>Delete Image 2</button> <!-- Simplified button for example -->
        </div>
    `;
 
@@ -609,26 +605,29 @@ function displayMatch() {
    const newDrawBtn = headToHeadContainer.querySelector('div:nth-child(2) button');
    const newDelBtn2 = headToHeadContainer.querySelector('.image-wrapper:nth-child(3) button');
 
+   if (!newImg1 || !newImg2) {
+       console.error("Failed to find images after recreating head-to-head UI.");
+       return;
+   }
 
   newImg1.src = getImageUrl(subset, currentPair[0]);
   newImg2.src = getImageUrl(subset, currentPair[1]);
 
-  // Re-attach event listeners
+  // Re-attach VOTE/DELETE event listeners
   newImg1.addEventListener('click', () => vote(1));
   newImg2.addEventListener('click', () => vote(2));
-  if (newDelBtn1) newDelBtn1.onclick = () => confirmDelete(1); // Use onclick for simplicity after recreation
+  if (newDelBtn1) newDelBtn1.onclick = () => confirmDelete(1);
   if (newDrawBtn) newDrawBtn.onclick = voteDraw;
   if (newDelBtn2) newDelBtn2.onclick = () => confirmDelete(2);
 
-   // Re-attach zoom listeners
-  headToHeadContainer.querySelectorAll('.image-wrapper').forEach(wrapper => {
-      const img = wrapper.querySelector('img');
-      if (img) {
-          wrapper.addEventListener('mouseenter', handleImageZoomEnter);
-          wrapper.addEventListener('mouseleave', handleImageZoomLeave);
-          img.addEventListener('mousemove', handleImageZoomMove);
-      }
-  });
+   // --- Attach ZOOM listeners to head-to-head images ---
+   [newImg1, newImg2].forEach(img => {
+       if(img) { // Check if img exists
+           img.addEventListener('mouseenter', handleImageZoomEnter);
+           img.addEventListener('mouseleave', handleImageZoomLeave);
+           img.addEventListener('mousemove', handleImageZoomMove);
+       }
+   });
 
    headToHeadContainer.style.display = 'flex'; // Ensure container is visible
     // Ensure vote buttons are visible

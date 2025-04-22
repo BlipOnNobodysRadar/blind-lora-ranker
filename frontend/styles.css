@@ -10,6 +10,7 @@ body {
   background: #f2f2f2; /* Slightly darker than white, for normal mode */
   color: #333;
   max-width: 100vw; /* Prevent horizontal scrolling if content overflows */
+  padding-bottom: 40px; /* Add padding at the very bottom of the page */
 }
 
 /* ------------------------------------------------------------------
@@ -192,40 +193,51 @@ body {
 .image-container {
   display: flex;
   flex-wrap: wrap;
-  gap: 20px;
+  gap: 10px;
   margin: 10px auto;
   padding: 20px;
   background: #eaeaea;
   border-radius: 5px;
   max-width: 95vw;      /* Fill most of screen width, no strict px limit */
-  justify-content: center;
-  align-items: flex-start;
-  height:83vh;
+  justify-content: space-around;
+  align-items: stretch;
+  max-height:83vh;
 }
 
 .image-wrapper {
-  flex: 0 1 45%;        /* Two images side-by-side on larger screens */
+  flex: 0 1 48%;        /* Two images side-by-side on larger screens */
   display: flex;
   flex-direction: column;
   align-items: center;
   background: #fff;
   border: 1px solid #ccc;
-  padding: 10px;
+  padding: 7px;
   border-radius: 5px;
   box-sizing: border-box;
+  overflow: hidden;
+  max-height: 83vh;
+  position:relative;
 }
 
-/* Default: no upscaling past base resolution, aspect ratio preserved */
+/* --- GENERALIZED Image Style (for hover base) --- */
+/* Apply base styles needed for zoom to ALL relevant images */
 .image-wrapper img {
-  display: block;
-  width: auto;
+  /* ... existing styles ... */
+  max-height: 95%; /* Keep max-height for head-to-head */
   max-width: 100%;
-  height: auto;
-  object-fit: contain;
-  border: 1px solid #ddd;
-  border-radius: 3px;
-  margin-bottom: 10px;
-  max-height: 87%;
+  /* Base styles for zoom effect */
+  transition: transform 0.2s ease-out;
+  transform-origin: center center;
+  transform: scale(1);
+  cursor: crosshair; /* Indicate zoom */
+  display: block;
+}
+
+.image-wrapper img:hover {
+  transform: scale(2); /* Adjust scale factor if needed */
+  /* transform-origin is set by JS */
+  z-index: 0; /* Ensure zoomed image is on top */
+  position: relative; /* Needed for z-index to work reliably */
 }
 
 /* If "Scale Images" toggle is ON, fill container (even if it upscales) */
@@ -541,14 +553,14 @@ Star rating section
   flex-direction: row; /* Arrange images in rows */
   justify-content: center;
   align-items: flex-start; /* Align items to the top */
-  gap: 20px; /* Increased gap for better spacing */
-  padding: 20px; /* Match padding of regular container */
-  background: none; /* Remove background */
-  border: none; /* Remove border */
-  max-width: 100vw; /* Allow it to take full width */
-  box-sizing: border-box; /* Include padding in width calculation */
-  height: 60vh;
-  margin: 30px;
+  gap: 20px;
+  padding: 20px;
+  background: none;
+  border: none;
+  max-width: 100vw;
+  box-sizing: border-box;
+  height: auto; /* Let height be determined by content */
+  margin: 10px auto; /* Use standard margin like other containers */
 }
 
 /* Style individual image cards in the seeding gallery */
@@ -747,17 +759,10 @@ body.dark-mode #confirm-seeding:disabled {
   /* Add transition for smoother zoom effect */
   transition: transform 0.2s ease-out; /* Transition scale and origin */
   transform-origin: center center; /* Default origin */
-  transform: scale(1); /* Default scale */
 
   /* Ensure the image is display: block to avoid extra space below it */
   display: block;
   cursor: crosshair; /* Change cursor to indicate zoomability */
-}
-
-/* Style when the image is hovered (or parent wrapper) */
-#seeding-gallery #image-seeding-cards .image-wrapper:hover img {
-  transform: scale(2.5); /* Zoom factor - adjust as needed */
-  /* transform-origin will be set by JavaScript on mousemove */
 }
 
 
@@ -766,4 +771,9 @@ body.dark-mode #confirm-seeding:disabled {
 #seeding-gallery #image-seeding-cards .image-wrapper .star-rating {
    position: relative; /* Ensure they stack below the image even when it zooms */
    z-index: 1; /* Make sure they are above the zoomed part of the image */
+  /* Prevent text selection during zoom interaction */
+  user-select: none;
+  -webkit-user-select: none; /* Safari */
+  -moz-user-select: none; /* Firefox */
+  -ms-user-select: none; /* IE */
 }
