@@ -1,26 +1,91 @@
+// frontend/script.js (Combined)
+
 let currentPair = [];
 let subset = '';
-let subsetType = 'ai'; // 'ai' or 'normal'
+let subsetType = 'ai'; // Default, will be determined dynamically
+let subsetSelectElementId = 'subset-select'; // Default
 let uninitializedImages = []; // Store list of images needing seeding
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Determine context (AI vs Normal) based on which select element exists
+  if (document.getElementById('normal-subset-select')) {
+    subsetType = 'normal';
+    subsetSelectElementId = 'normal-subset-select';
+  } else if (document.getElementById('subset-select')) {
+    subsetType = 'ai';
+    subsetSelectElementId = 'subset-select';
+  } else {
+    console.error("Could not determine subset type. Missing #subset-select or #normal-subset-select element.");
+    // Display error to user maybe?
+    document.body.innerHTML = '<h1>Configuration Error</h1><p>Could not find the necessary subset selection element. Please check the HTML structure.</p>';
+    return; // Stop execution if context cannot be determined
+  }
+
+  console.log(`Script context initialized as: ${subsetType}`);
+
+  // Scaling Toggle Logic (if element exists - commented out in HTML but keep logic)
   const scalingToggle = document.getElementById('scalingToggle');
   if (scalingToggle) {
-    // Set initial state based on whether it's checked
-    handleScalingToggle();
-
-    // Listen for user changes
+    handleScalingToggle(); // Set initial state
     scalingToggle.addEventListener('change', handleScalingToggle);
   }
 
   // Call initialization logic
   initializeSubset();
 
-   // Add event listeners for the Draw button
-   document.querySelector('#head-to-head-ui button[onclick="voteDraw()"]')
-    .addEventListener('click', voteDraw);
-});
+  // Add event listeners for the Draw button (ensure it exists)
+  const drawButton = document.querySelector('#head-to-head-ui button[onclick="voteDraw()"]');
+   if (drawButton) {
+        drawButton.addEventListener('click', voteDraw);
+   } else {
+       console.warn("Draw button not found during initialization.");
+   }
 
+    // Add event listeners for image clicks/delete buttons (check if head-to-head UI exists)
+    const headToHeadUI = document.getElementById('head-to-head-ui');
+    if (headToHeadUI) {
+        const img1 = headToHeadUI.querySelector('#image1');
+        const img2 = headToHeadUI.querySelector('#image2');
+        const delBtn1 = headToHeadUI.querySelector('.image-wrapper:nth-child(1) button[onclick^="confirmDelete"]');
+        const delBtn2 = headToHeadUI.querySelector('.image-wrapper:nth-child(3) button[onclick^="confirmDelete"]'); // Adjust selector if layout changes
+
+        if (img1) img1.addEventListener('click', () => vote(1));
+        if (img2) img2.addEventListener('click', () => vote(2));
+        if (delBtn1) delBtn1.addEventListener('click', () => confirmDelete(1));
+        if (delBtn2) delBtn2.addEventListener('click', () => confirmDelete(2));
+
+         // Add event listeners for zoom effect to the head-to-head images
+        const imageWrappers = headToHeadUI.querySelectorAll('.image-wrapper');
+        imageWrappers.forEach(wrapper => {
+             const img = wrapper.querySelector('img');
+             if (img) {
+                 wrapper.addEventListener('mouseenter', handleImageZoomEnter);
+                 wrapper.addEventListener('mouseleave', handleImageZoomLeave);
+                 img.addEventListener('mousemove', handleImageZoomMove);
+             }
+        });
+
+    } else {
+        console.warn("Head-to-head UI container not found during initialization.");
+    }
+
+    const seedingGallery = document.getElementById('seeding-gallery');
+    if (seedingGallery) {
+        // Select ALL buttons with the class
+        const confirmButtons = seedingGallery.querySelectorAll('.confirm-seeding-button');
+        if (confirmButtons.length > 0) {
+             // Add listener to each button found
+             confirmButtons.forEach(button => {
+                 button.addEventListener('click', confirmSeedRatings);
+             });
+        } else {
+             console.warn("Confirm seeding buttons not found during initialization.");
+        }
+    } else {
+         console.warn("Seeding gallery container not found during initialization.");
+    }
+
+});
 
 function handleScalingToggle() {
   const scalingToggle = document.getElementById('scalingToggle');
@@ -34,22 +99,94 @@ function handleScalingToggle() {
 }
 
 /**
- * Fetches all subsets and initializes the UI based on subset initialization status.
+ * Dynamically constructs API URLs based on subsetType.
+ * @param {string} baseEndpoint - The core endpoint name (e.g., 'subsets', 'match', 'vote').
+ * @param {string|null} [subsetName=null] - The specific subset name, if needed.
+ * @param {string|null} [imageName=null] - The specific image name, if needed.
+ * @returns {string} The constructed API URL.
+ */
+function getApiUrl(baseEndpoint, subsetName = null, imageName = null) {
+  let prefix = subsetType === 'ai' ? '' : 'normal-';
+  let url = '/api/';
+
+  switch (baseEndpoint) {
+    case 'subsets':
+      url += `${prefix}subsets`;
+      break;
+    case 'match':
+    case 'vote':
+    case 'progress':
+      if (!subsetName) throw new Error(`Subset name required for endpoint: ${baseEndpoint}`);
+      url += `${prefix}${baseEndpoint}/${subsetName}`;
+      break;
+    case 'seed':
+       if (!subsetName) throw new Error(`Subset name required for endpoint: ${baseEndpoint}`);
+       url += `seed-ratings/${subsetType}/${subsetName}`; // Special structure
+       break;
+    case 'image':
+      if (!subsetName || !imageName) throw new Error(`Subset and image name required for endpoint: ${baseEndpoint}`);
+      // Note the slightly different structure for image deletion
+      url += `${subsetType === 'ai' ? 'image' : 'normal-image'}/${subsetName}/${imageName}`;
+      break;
+    default:
+      throw new Error(`Unknown base endpoint: ${baseEndpoint}`);
+  }
+  return url;
+}
+
+/**
+ * Dynamically constructs image source URLs.
+ * @param {string} subsetName - The name of the subset.
+ * @param {string} imageName - The filename of the image.
+ * @returns {string} The constructed image source URL.
+ */
+function getImageUrl(subsetName, imageName) {
+  const baseDir = subsetType === 'ai' ? 'images' : 'normal-images';
+  return `${baseDir}/${subsetName}/${imageName}`;
+}
+
+
+/**
+ * Fetches all subsets for the current type and initializes the UI.
  */
 function initializeSubset() {
-  fetch('/api/subsets')
+  fetch(getApiUrl('subsets'))
     .then(response => response.json())
     .then(data => {
-      const subsetSelect = document.getElementById('subset-select');
-      subsetSelect.innerHTML = '';
-      if (data.length === 0) {
-          // Handle no subsets case
-           document.querySelector('#head-to-head-ui .image-container').innerHTML = '<p>No AI image subsets found. Add subdirectories to /AI_images.</p>';
-           document.getElementById('image-count-status').textContent = '';
-           document.getElementById('seeding-gallery').style.display = 'none';
-           document.getElementById('head-to-head-ui').style.display = 'none';
-          return;
+      const subsetSelect = document.getElementById(subsetSelectElementId);
+      if (!subsetSelect) {
+        console.error(`Subset select element #${subsetSelectElementId} not found!`);
+        return;
       }
+      subsetSelect.innerHTML = ''; // Clear existing options
+
+      if (!data || data.length === 0) {
+        // Handle no subsets case
+        const message = subsetType === 'ai'
+          ? 'No AI image subsets found. Add subdirectories with PNGs (and LoRA metadata if desired) to /AI_images.'
+          : 'No normal image subsets found. Add subdirectories with images to /normal_images.';
+
+        const headToHeadContainer = document.querySelector('#head-to-head-ui .image-container');
+        if (headToHeadContainer) headToHeadContainer.innerHTML = `<p>${message}</p>`;
+
+        const statusSpan = document.getElementById('image-count-status');
+        if (statusSpan) statusSpan.textContent = '';
+
+        const seedingGallery = document.getElementById('seeding-gallery');
+        if (seedingGallery) seedingGallery.style.display = 'none';
+
+        const headToHeadUI = document.getElementById('head-to-head-ui');
+        if (headToHeadUI) headToHeadUI.style.display = 'none';
+
+        // Add default option to select dropdown
+        const defaultOption = document.createElement('option');
+        defaultOption.textContent = `--- No ${subsetType.toUpperCase()} Subsets Found ---`;
+        defaultOption.disabled = true;
+        subsetSelect.appendChild(defaultOption);
+
+        return;
+      }
+
       data.forEach(s => {
         const option = document.createElement('option');
         option.value = s;
@@ -59,19 +196,41 @@ function initializeSubset() {
 
       // Set subset based on query params or default to first
       const params = new URLSearchParams(window.location.search);
-      subset = params.get('subset') || data[0];
+      const requestedSubset = params.get('subset');
+      // Check if the requested subset actually exists in the list
+      if (requestedSubset && data.includes(requestedSubset)) {
+          subset = requestedSubset;
+      } else {
+          subset = data[0]; // Default to the first one if requested doesn't exist or none requested
+          // Optionally update URL if defaulting
+          // window.history.replaceState({}, '', `?subset=${subset}`);
+      }
       subsetSelect.value = subset;
 
       // Now check initialization status for the selected subset
       checkInitializationStatus(subset);
-
     })
     .catch(err => {
-        console.error('Error fetching subsets:', err);
-         document.querySelector('#head-to-head-ui .image-container').innerHTML = `<p>Error loading subsets: ${err.message}</p>`;
-         document.getElementById('image-count-status').textContent = '';
-         document.getElementById('seeding-gallery').style.display = 'none';
-         document.getElementById('head-to-head-ui').style.display = 'none';
+        console.error(`Error fetching ${subsetType} subsets:`, err);
+        const errorMsg = `<p>Error loading subsets: ${err.message}. Ensure the backend server is running and accessible.</p>`;
+        const headToHeadContainer = document.querySelector('#head-to-head-ui .image-container');
+         if (headToHeadContainer) headToHeadContainer.innerHTML = errorMsg;
+         const statusSpan = document.getElementById('image-count-status');
+         if(statusSpan) statusSpan.textContent = '';
+         const seedingGallery = document.getElementById('seeding-gallery');
+         if(seedingGallery) seedingGallery.style.display = 'none';
+         const headToHeadUI = document.getElementById('head-to-head-ui');
+         if(headToHeadUI) headToHeadUI.style.display = 'none';
+
+         // Update select dropdown on error
+         const subsetSelect = document.getElementById(subsetSelectElementId);
+         if (subsetSelect) {
+            subsetSelect.innerHTML = '';
+            const errorOption = document.createElement('option');
+            errorOption.textContent = `--- Error Loading ${subsetType.toUpperCase()} Subsets ---`;
+            errorOption.disabled = true;
+            subsetSelect.appendChild(errorOption);
+         }
     });
 }
 
@@ -80,15 +239,26 @@ function initializeSubset() {
  * @param {string} subsetName - The name of the current subset.
  */
 function checkInitializationStatus(subsetName) {
-     fetch(`/api/match/${subsetName}`) // We use the match endpoint, which now checks for initialization
+     // Show loading state?
+     const statusSpan = document.getElementById('image-count-status');
+     if (statusSpan) {
+          statusSpan.textContent = '(Loading...)';
+          statusSpan.style.color = ''; // Reset color
+     }
+
+     fetch(getApiUrl('match', subsetName)) // Use the match endpoint, which now checks for initialization
        .then(response => response.json())
        .then(data => {
+           const headToHeadUI = document.getElementById('head-to-head-ui');
+           const seedingGallery = document.getElementById('seeding-gallery');
+           const headToHeadContainer = headToHeadUI ? headToHeadUI.querySelector('.image-container') : null;
+
            if (data.error) {
                console.error(data.error);
-                document.querySelector('#head-to-head-ui .image-container').innerHTML = `<p>Error loading subset data: ${data.error}</p>`;
-                document.getElementById('image-count-status').textContent = '';
-                document.getElementById('seeding-gallery').style.display = 'none';
-                document.getElementById('head-to-head-ui').style.display = 'none';
+               if (headToHeadContainer) headToHeadContainer.innerHTML = `<p>Error loading subset data: ${data.error}</p>`;
+               if (statusSpan) statusSpan.textContent = '(Error)';
+               if (seedingGallery) seedingGallery.style.display = 'none';
+               if (headToHeadUI) headToHeadUI.style.display = 'none';
                return;
            }
 
@@ -102,18 +272,29 @@ function checkInitializationStatus(subsetName) {
                // All images are initialized, proceed with head-to-head
                uninitializedImages = []; // Clear the list
                showHeadToHeadUI();
-               // Data already contains the first match pair, so use it
-               currentPair = [data.image1, data.image2];
-               displayMatch();
+               if (data.image1 && data.image2) {
+                   currentPair = [data.image1, data.image2];
+                   displayMatch();
+               } else {
+                    // Handle case where seeding is not required, but no pair could be formed
+                    // (e.g., only 0 or 1 initialized images left)
+                    if (headToHeadContainer) headToHeadContainer.innerHTML = '<p>Not enough initialized images remaining to form a pair. Add more images or check rankings.</p>';
+                     // Hide delete/draw buttons
+                    headToHeadUI.querySelectorAll('button').forEach(btn => btn.style.display = 'none');
+               }
                fetchProgress(); // Fetch progress for the bar
            }
        })
        .catch(err => {
-           console.error('Error checking initialization status:', err);
-            document.querySelector('#head-to-head-ui .image-container').innerHTML = `<p>Error checking subset status: ${err.message}</p>`;
-            document.getElementById('image-count-status').textContent = '';
-            document.getElementById('seeding-gallery').style.display = 'none';
-            document.getElementById('head-to-head-ui').style.display = 'none';
+           console.error(`Error checking ${subsetType} initialization status:`, err);
+           const headToHeadUI = document.getElementById('head-to-head-ui');
+           const seedingGallery = document.getElementById('seeding-gallery');
+           const headToHeadContainer = headToHeadUI ? headToHeadUI.querySelector('.image-container') : null;
+
+            if (headToHeadContainer) headToHeadContainer.innerHTML = `<p>Error checking subset status: ${err.message}</p>`;
+            if (statusSpan) statusSpan.textContent = '(Error)';
+            if (seedingGallery) seedingGallery.style.display = 'none';
+            if (headToHeadUI) headToHeadUI.style.display = 'none';
        });
 }
 
@@ -121,16 +302,20 @@ function checkInitializationStatus(subsetName) {
  * Shows the seeding gallery UI and hides the head-to-head UI.
  */
 function showSeedingUI() {
-    document.getElementById('head-to-head-ui').style.display = 'none';
-    document.getElementById('seeding-gallery').style.display = 'block';
+    const headToHeadUI = document.getElementById('head-to-head-ui');
+    const seedingGallery = document.getElementById('seeding-gallery');
+    if (headToHeadUI) headToHeadUI.style.display = 'none';
+    if (seedingGallery) seedingGallery.style.display = 'block';
 }
 
 /**
  * Shows the head-to-head UI and hides the seeding gallery UI.
  */
 function showHeadToHeadUI() {
-    document.getElementById('seeding-gallery').style.display = 'none';
-    document.getElementById('head-to-head-ui').style.display = 'block';
+    const headToHeadUI = document.getElementById('head-to-head-ui');
+    const seedingGallery = document.getElementById('seeding-gallery');
+    if (seedingGallery) seedingGallery.style.display = 'none';
+    if (headToHeadUI) headToHeadUI.style.display = 'block';
 }
 
 /**
@@ -139,40 +324,54 @@ function showHeadToHeadUI() {
  */
 function renderSeedingGallery(images) {
   const galleryDiv = document.getElementById('image-seeding-cards');
+  // Select ALL confirm buttons
+  const confirmButtons = document.querySelectorAll('.confirm-seeding-button');
+  const seedingMessage = document.getElementById('seeding-message');
+
+  // Check if essential elements exist
+  if (!galleryDiv || confirmButtons.length === 0 || !seedingMessage) {
+      console.error("Seeding UI elements (gallery, buttons, or message area) not found!");
+      // Hide the gallery container entirely if elements are missing
+       const seedingGalleryContainer = document.getElementById('seeding-gallery');
+       if (seedingGalleryContainer) seedingGalleryContainer.style.display = 'none';
+      return;
+  }
+
   galleryDiv.innerHTML = ''; // Clear previous images
-  const confirmButton = document.getElementById('confirm-seeding');
-  confirmButton.disabled = true; // Disable button until all ratings are selected
+  // Disable ALL buttons initially
+  confirmButtons.forEach(button => {
+      button.disabled = true;
+      button.style.display = 'none'; // Hide initially
+  });
+  seedingMessage.textContent = ''; // Clear previous message
 
   if (images.length === 0) {
        galleryDiv.innerHTML = '<p>No uninitialized images found in this subset.</p>';
-       confirmButton.style.display = 'none'; // Hide button if no images
+       // Keep buttons hidden if no images
        return;
   } else {
-       confirmButton.style.display = 'block';
+       // Show buttons if there are images
+       confirmButtons.forEach(button => button.style.display = 'inline-block');
   }
-
 
   images.forEach(image => {
       const imageWrapper = document.createElement('div');
-      imageWrapper.className = 'image-wrapper seeding-card'; // Added 'seeding-card' class for potential specific styling
-      imageWrapper.dataset.imageName = image; // Store image name
+      imageWrapper.className = 'image-wrapper seeding-card';
+      imageWrapper.dataset.imageName = image;
 
       const imgElement = document.createElement('img');
-      imgElement.src = `images/${subset}/${image}`; // Use `normal-images` for script-normal.js
+      imgElement.src = getImageUrl(subset, image);
       imgElement.alt = image;
       imgElement.loading = 'lazy'; // Add lazy loading
-      // imgElement.style.maxWidth = '200px'; // REMOVE THIS LINE, CSS handles sizing now
-
 
       const nameElement = document.createElement('p');
       nameElement.textContent = image;
-       nameElement.style.wordBreak = 'break-all'; // Prevent long names overflowing
-       nameElement.style.overflowWrap = 'break-word'; // Alias for word-break
-
+      nameElement.style.wordBreak = 'break-all';
+      nameElement.style.overflowWrap = 'break-word';
 
       const ratingDiv = document.createElement('div');
       ratingDiv.className = 'star-rating';
-      ratingDiv.dataset.imageName = image; // Link rating group to image
+      ratingDiv.dataset.imageName = image;
 
       // Create 10 stars (radio buttons)
       for (let i = 10; i >= 1; i--) {
@@ -201,10 +400,10 @@ function renderSeedingGallery(images) {
       imgElement.addEventListener('mousemove', handleImageZoomMove);
 
 
-      // Hide delete button in seeding view
+      // Delete button is hidden in seeding view (kept structurally for consistency perhaps)
        const deleteButton = document.createElement('button');
        deleteButton.textContent = 'Delete';
-       deleteButton.style.display = 'none';
+       deleteButton.style.display = 'none'; // Explicitly hide
        imageWrapper.appendChild(deleteButton);
 
 
@@ -216,22 +415,24 @@ function renderSeedingGallery(images) {
 }
 
 
-// --- New Zoom Effect Functions ---
+// --- Zoom Effect Functions ---
 
 function handleImageZoomEnter(event) {
-  const img = event.target.querySelector('img');
+  const wrapper = event.currentTarget; // Get the wrapper div
+  const img = wrapper.querySelector('img');
   if (img) {
-      // The CSS :hover rule handles the initial transform scale
+      // The CSS :hover rule on the *wrapper* handles the initial transform scale
       // We only need mousemove for origin
   }
 }
 
 function handleImageZoomLeave(event) {
-  const img = event.target.querySelector('img');
+  const wrapper = event.currentTarget; // Get the wrapper div
+  const img = wrapper.querySelector('img');
   if (img) {
       // Reset transform-origin when leaving the wrapper
       img.style.transformOrigin = 'center center';
-      // The CSS :hover rule will handle the transform scale resetting
+      // The CSS :hover rule on the wrapper will handle the transform scale resetting
   }
 }
 
@@ -249,8 +450,13 @@ function handleImageZoomMove(event) {
       const xPercent = (x / rect.width) * 100;
       const yPercent = (y / rect.height) * 100;
 
+      // Clamp percentages between 0 and 100
+      const clampedX = Math.max(0, Math.min(100, xPercent));
+      const clampedY = Math.max(0, Math.min(100, yPercent));
+
+
       // Set the transform origin
-      img.style.transformOrigin = `${xPercent}% ${yPercent}%`;
+      img.style.transformOrigin = `${clampedX}% ${clampedY}%`;
   }
 }
 
@@ -259,27 +465,35 @@ function handleImageZoomMove(event) {
  * Enables/disables the confirm button.
  */
 function checkAllRatingsSelected() {
-    const totalImages = uninitializedImages.length;
-    let ratedCount = 0;
-    uninitializedImages.forEach(image => {
-        const ratingInputs = document.querySelectorAll(`input[name="rating-${image}"]:checked`);
-        if (ratingInputs.length > 0) {
-            ratedCount++;
-        }
-    });
+  if (uninitializedImages.length === 0) return; // No images to check
 
-    const confirmButton = document.getElementById('confirm-seeding');
-     const seedingMessage = document.getElementById('seeding-message');
+  const totalImages = uninitializedImages.length;
+  let ratedCount = 0;
+  uninitializedImages.forEach(image => {
+      const ratingGroup = document.querySelector(`.star-rating[data-image-name="${image}"]`);
+      if (ratingGroup && ratingGroup.querySelector(`input[name="rating-${image}"]:checked`)) {
+          ratedCount++;
+      }
+  });
 
-    if (ratedCount === totalImages) {
-        confirmButton.disabled = false;
-         seedingMessage.textContent = 'All images rated!';
-         seedingMessage.style.color = 'green';
-    } else {
-        confirmButton.disabled = true;
-         seedingMessage.textContent = `Rated ${ratedCount} of ${totalImages} images`;
-         seedingMessage.style.color = 'orange';
-    }
+  // Select ALL confirm buttons
+  const confirmButtons = document.querySelectorAll('.confirm-seeding-button');
+  const seedingMessage = document.getElementById('seeding-message');
+
+  if (confirmButtons.length === 0 || !seedingMessage) return; // Elements might not exist
+
+  const allRated = ratedCount === totalImages;
+
+  // Enable/disable ALL buttons
+  confirmButtons.forEach(button => button.disabled = !allRated);
+
+  if (allRated) {
+       seedingMessage.textContent = 'All images rated!';
+       seedingMessage.style.color = 'green';
+  } else {
+       seedingMessage.textContent = `Rated ${ratedCount} of ${totalImages} images`;
+       seedingMessage.style.color = 'orange';
+  }
 }
 
 
@@ -300,40 +514,54 @@ function confirmSeedRatings() {
     });
 
     if (!allRated) {
-        alert('Please rate all images before confirming.');
-        return;
+      alert('Please rate all images before confirming.');
+      return;
     }
 
-     const confirmButton = document.getElementById('confirm-seeding');
-     confirmButton.disabled = true; // Disable during processing
-     const seedingMessage = document.getElementById('seeding-message');
-     seedingMessage.textContent = 'Saving ratings...';
-     seedingMessage.style.color = 'blue';
+    // Select ALL confirm buttons
+    const confirmButtons = document.querySelectorAll('.confirm-seeding-button');
+    const seedingMessage = document.getElementById('seeding-message');
 
+    // Disable ALL buttons during processing
+    confirmButtons.forEach(button => button.disabled = true);
 
-    fetch(`/api/seed-ratings/${subsetType}/${subset}`, {
+    if (seedingMessage) {
+        seedingMessage.textContent = 'Saving ratings...';
+        seedingMessage.style.color = 'blue';
+    }
+
+    fetch(getApiUrl('seed', subset), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ratings: ratings })
     })
     .then(res => {
          if (!res.ok) {
+             // Try to parse error message from backend
              return res.json().then(err => Promise.reject(err));
          }
          return res.json();
      })
     .then(data => {
         console.log('Seed ratings saved:', data.message);
+        if (seedingMessage) {
+            seedingMessage.textContent = data.message || "Ratings saved successfully!";
+            seedingMessage.style.color = 'green';
+        }
         // After saving, re-initialize the subset to switch back to head-to-head
-        initializeSubset();
-         seedingMessage.textContent = data.message;
-         seedingMessage.style.color = 'green';
+        // Add a small delay so the user can see the success message
+        setTimeout(() => {
+            initializeSubset();
+        }, 1500);
     })
     .catch(err => {
-        console.error('Error saving seed ratings:', err);
-         seedingMessage.textContent = `Error: ${err.message || err.error || 'Unknown error'}`;
-         seedingMessage.style.color = 'red';
-         confirmButton.disabled = false; // Re-enable button on error
+      console.error('Error saving seed ratings:', err);
+       if (seedingMessage) {
+          seedingMessage.textContent = `Error: ${err.message || err.error || 'Unknown error'}`;
+          seedingMessage.style.color = 'red';
+       }
+       // Re-enable ALL buttons on error
+       confirmButtons.forEach(button => button.disabled = false);
     });
 }
 
@@ -342,52 +570,128 @@ function confirmSeedRatings() {
  * Displays the current match pair in the head-to-head UI.
  */
 function displayMatch() {
+   const img1Element = document.getElementById('image1');
+   const img2Element = document.getElementById('image2');
+   const headToHeadContainer = document.querySelector('#head-to-head-ui .image-container');
+   const voteButtons = document.querySelectorAll('#head-to-head-ui button'); // Select all buttons within the UI
+
+   if (!img1Element || !img2Element || !headToHeadContainer) {
+       console.error("Head-to-head UI elements missing!");
+       return;
+   }
+
    if (currentPair.length < 2) {
-        document.querySelector('#head-to-head-ui .image-container').innerHTML = '<p>Not enough images to form a pair.</p>';
-        // Optionally hide vote buttons, etc.
+        headToHeadContainer.innerHTML = '<p>Not enough images to form a pair.</p>';
+         // Hide vote buttons
+         voteButtons.forEach(btn => btn.style.display = 'none');
         return;
    }
-  document.getElementById('image1').src = `images/${subset}/${currentPair[0]}`;
-  document.getElementById('image2').src = `images/${subset}/${currentPair[1]}`;
-   document.querySelector('#head-to-head-ui .image-container').style.display = 'flex'; // Ensure container is visible
-    // Optionally show vote buttons if they were hidden
+
+   // Clear previous content and ensure structure is correct
+   headToHeadContainer.innerHTML = `
+       <div class="image-wrapper">
+         <img id="image1" src="" alt="Image 1">
+         <button onclick="confirmDelete(1)">Delete Image 1</button>
+       </div>
+       <div style="margin-top: 20px;">
+         <button onclick="voteDraw()">Draw</button>
+       </div>
+       <div class="image-wrapper">
+         <img id="image2" src="" alt="Image 2">
+         <button onclick="confirmDelete(2)">Delete Image 2</button>
+       </div>
+   `;
+
+    // Re-fetch elements after resetting innerHTML
+   const newImg1 = document.getElementById('image1');
+   const newImg2 = document.getElementById('image2');
+   const newDelBtn1 = headToHeadContainer.querySelector('.image-wrapper:nth-child(1) button');
+   const newDrawBtn = headToHeadContainer.querySelector('div:nth-child(2) button');
+   const newDelBtn2 = headToHeadContainer.querySelector('.image-wrapper:nth-child(3) button');
+
+
+  newImg1.src = getImageUrl(subset, currentPair[0]);
+  newImg2.src = getImageUrl(subset, currentPair[1]);
+
+  // Re-attach event listeners
+  newImg1.addEventListener('click', () => vote(1));
+  newImg2.addEventListener('click', () => vote(2));
+  if (newDelBtn1) newDelBtn1.onclick = () => confirmDelete(1); // Use onclick for simplicity after recreation
+  if (newDrawBtn) newDrawBtn.onclick = voteDraw;
+  if (newDelBtn2) newDelBtn2.onclick = () => confirmDelete(2);
+
+   // Re-attach zoom listeners
+  headToHeadContainer.querySelectorAll('.image-wrapper').forEach(wrapper => {
+      const img = wrapper.querySelector('img');
+      if (img) {
+          wrapper.addEventListener('mouseenter', handleImageZoomEnter);
+          wrapper.addEventListener('mouseleave', handleImageZoomLeave);
+          img.addEventListener('mousemove', handleImageZoomMove);
+      }
+  });
+
+   headToHeadContainer.style.display = 'flex'; // Ensure container is visible
+    // Ensure vote buttons are visible
+   voteButtons.forEach(btn => btn.style.display = 'inline-block'); // Use inline-block or block as appropriate
 }
 
 
 /**
- * Fetches the progress data and updates the progress bar.
- * Now also updates the image count status.
+ * Fetches the progress data and updates the progress bar and image count status.
  */
 function fetchProgress() {
-  fetch(`/api/progress/${subset}`)
+    if (!subset) {
+        console.warn("fetchProgress called without a selected subset.");
+         const statusSpan = document.getElementById('image-count-status');
+         if(statusSpan) statusSpan.textContent = '(Select Subset)';
+        return;
+    }
+
+  fetch(getApiUrl('progress', subset))
     .then(response => response.json())
     .then(data => {
+        if (data.error) {
+            console.error("Error fetching progress:", data.error);
+            const statusSpan = document.getElementById('image-count-status');
+            if (statusSpan) {
+                statusSpan.textContent = `(Error: ${data.error})`;
+                statusSpan.style.color = 'red';
+            }
+             updateProgressBar(0); // Reset progress bar on error
+            return;
+        }
+
       const { minimalMatches, totalImages, initializedImagesCount } = data;
       updateProgressBar(minimalMatches);
 
        // Update image count status
        const statusSpan = document.getElementById('image-count-status');
-       if (totalImages > 0) {
-            statusSpan.textContent = `(${initializedImagesCount}/${totalImages} initialized)`;
-             // Add color based on initialization progress
-             if (initializedImagesCount === totalImages) {
-                 statusSpan.style.color = 'green';
-             } else if (initializedImagesCount > 0) {
-                 statusSpan.style.color = 'orange';
-             } else {
-                 statusSpan.style.color = 'red';
-             }
-
-       } else {
-            statusSpan.textContent = '(No images)';
-            statusSpan.style.color = '';
+       if (statusSpan) {
+           if (totalImages > 0) {
+                statusSpan.textContent = `(${initializedImagesCount}/${totalImages} initialized)`;
+                 // Add color based on initialization progress
+                 if (initializedImagesCount === totalImages) {
+                     statusSpan.style.color = 'green';
+                 } else if (initializedImagesCount > 0) {
+                     statusSpan.style.color = 'orange';
+                 } else {
+                     statusSpan.style.color = 'red'; // No images initialized yet
+                 }
+           } else {
+                statusSpan.textContent = '(0 images)';
+                statusSpan.style.color = ''; // Default color
+           }
        }
 
     })
     .catch(err => {
-         console.error('Error fetching progress:', err);
-          document.getElementById('image-count-status').textContent = '(Error loading status)';
-           document.getElementById('image-count-status').style.color = 'red';
+         console.error(`Error fetching ${subsetType} progress:`, err);
+         const statusSpan = document.getElementById('image-count-status');
+          if (statusSpan) {
+            statusSpan.textContent = '(Error loading status)';
+            statusSpan.style.color = 'red';
+          }
+         updateProgressBar(0); // Reset progress bar on network error
     });
 }
 
@@ -396,94 +700,105 @@ function fetchProgress() {
  * @param {number} minimalMatches - The minimal number of matches across all *initialized* images.
  */
 function updateProgressBar(minimalMatches) {
-  const max = 20;
+  const max = 20; // Target for "good" reliability
   const bar = document.getElementById('overall-progress-bar');
   const label = document.getElementById('progress-label');
+  const container = document.querySelector('.progress-container'); // Get the container
 
-  let displayValue = minimalMatches;
-  let percentage = (displayValue / max) * 100;
-
-  if (displayValue > max) {
-    percentage = 100; // Cap bar at 100%
+  if (!bar || !label || !container) {
+      // console.warn("Progress bar elements not found."); // Reduce console noise if elements aren't always present
+      return;
   }
+
+  // Ensure minimalMatches is a non-negative number
+  const validMatches = typeof minimalMatches === 'number' && minimalMatches >= 0 ? minimalMatches : 0;
+
+  let displayValue = validMatches;
+  // Calculate percentage, ensuring it doesn't exceed 100%
+  let percentage = Math.min((displayValue / max) * 100, 100);
 
   bar.style.width = percentage + '%';
-  label.textContent = displayValue + (displayValue >= max ? '+' : '') + '/' + max; // Use >= max for plus sign
+  label.textContent = displayValue + (displayValue >= max ? '+' : '') + '/' + max;
 
-  // Base color based on progress thresholds
+  // Base color based on progress thresholds - using the section classes defined in CSS
+  container.classList.remove('progress-state-not-reliable', 'progress-state-minimum', 'progress-state-decent', 'progress-state-good');
   let baseColor;
-  if (minimalMatches < 5) {
-    baseColor = 'rgba(204, 41, 41, 0.7)'; // Darker semi-transparent red
-  } else if (minimalMatches < 10) {
-    baseColor = 'rgba(204, 97, 0, 0.7)'; // Darker semi-transparent orange
-  } else if (minimalMatches < 20) {
-    baseColor = 'rgba(204, 165, 0, 0.7)'; // Darker semi-transparent yellow
-  } else {
-    baseColor = 'rgba(61, 140, 64, 0.7)'; // Darker semi-transparent green
+  if (displayValue < 5) {
+      container.classList.add('progress-state-not-reliable');
+      baseColor = 'rgba(204, 41, 41, 0.7)'; // Semi-transparent red
+  } else if (displayValue < 10) {
+      container.classList.add('progress-state-minimum');
+      baseColor = 'rgba(204, 97, 0, 0.7)'; // Semi-transparent orange
+  } else if (displayValue < max) {
+      container.classList.add('progress-state-decent');
+      baseColor = 'rgba(204, 165, 0, 0.7)'; // Semi-transparent yellow
+  } else { // displayValue >= max
+      container.classList.add('progress-state-good');
+      baseColor = 'rgba(61, 140, 64, 0.7)'; // Semi-transparent green
   }
 
-  // Set the background with both the base color and the purple edge gradient
-  bar.style.backgroundImage = `linear-gradient(to right,
-    ${baseColor},
-    ${baseColor} 96%,
-    rgba(128, 0, 128, 1) 96%,
-    rgba(128, 0, 128, 1) 100%)`;
+   // Set the background with both the base color and the purple edge gradient ONLY if percentage > 0
+   if (percentage > 0) {
+       bar.style.backgroundImage = `linear-gradient(to right,
+           ${baseColor},
+           ${baseColor} 96%,
+           rgba(128, 0, 128, 1) 96%,
+           rgba(128, 0, 128, 1) 100%)`;
+   } else {
+       bar.style.backgroundImage = 'none'; // No gradient if width is 0
+       bar.style.backgroundColor = 'transparent'; // Ensure no solid color either
+   }
 
-  // Show/hide the "Good" section based on progress
-  const goodSection = document.querySelector('.section-good');
-  if (goodSection) {
-    // Note: The CSS displays these labels based on percentage width.
-    // We don't strictly need to hide/show the .section-good label here
-    // based on minimalMatches, as the CSS widths handle the colored background.
-    // But if you want the text label itself to only appear at >= 20, you could do:
-    // if (displayValue >= max) { goodSection.style.display = 'flex'; } else { goodSection.style.display = 'none'; }
-    // For now, let's rely on CSS widths.
-  }
 }
 
+
 /**
- * Records a vote with the specified result type.
+ * Records a vote for a win/loss.
  * @param {number} winnerIndex - The index (1 or 2) of the winning image.
- * @param {string} resultType - The type of result: 'win' or 'strongWin' (backend currently only uses winner/loser)
  */
-function vote(winnerIndex) { // Removed resultType as it's not used in backend updateRatings currently
+function vote(winnerIndex) {
   if (currentPair.length < 2) {
     console.error('Not enough images to vote');
     return;
   }
-   // Disable voting temporarily
-   document.getElementById('image1').style.pointerEvents = 'none';
-   document.getElementById('image2').style.pointerEvents = 'none';
-
+  // Disable voting temporarily to prevent double clicks
+  const img1 = document.getElementById('image1');
+  const img2 = document.getElementById('image2');
+  if (img1) img1.style.pointerEvents = 'none';
+  if (img2) img2.style.pointerEvents = 'none';
 
   const winner = currentPair[winnerIndex - 1];
   const loser = currentPair[winnerIndex === 1 ? 1 : 0];
-  fetch(`/api/vote/${subset}`, {
+
+  fetch(getApiUrl('vote', subset), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ winner, loser /*, result: resultType*/ }) // Can re-add result if backend uses it
+    body: JSON.stringify({ winner, loser }) // Backend vote endpoint currently ignores 'result' type for win/loss
   })
     .then(res => {
-        // Re-enable voting regardless of success/failure
-       document.getElementById('image1').style.pointerEvents = 'auto';
-       document.getElementById('image2').style.pointerEvents = 'auto';
+       // Re-enable voting regardless of success/failure
+       if (img1) img1.style.pointerEvents = 'auto';
+       if (img2) img2.style.pointerEvents = 'auto';
 
-         if (!res.ok) {
-             return res.json().then(err => Promise.reject(err));
-         }
-         return res.json();
-     })
+       if (!res.ok) {
+            // Try to parse error message from backend
+            return res.json().then(err => Promise.reject(err));
+        }
+        return res.json();
+    })
     .then(() => {
-      fetchMatch(); // Fetches next match or signals seeding
+      fetchMatch(); // Fetches next match or signals seeding needed
       fetchProgress();
     })
     .catch(err => {
-        console.error('Error recording vote:', err);
+        console.error(`Error recording ${subsetType} vote:`, err);
          alert(`Error recording vote: ${err.message || err.error || 'Unknown error'}`); // Provide user feedback
-         fetchMatch(); // Try fetching next match anyway
+         // Still try to fetch the next match even on error
+         fetchMatch();
          fetchProgress();
     });
 }
+
 
 /**
  * Records a draw vote.
@@ -494,32 +809,29 @@ function voteDraw() {
     return;
   }
    // Disable voting temporarily
-   document.getElementById('image1').style.pointerEvents = 'none';
-   document.getElementById('image2').style.pointerEvents = 'none';
-
+   const img1 = document.getElementById('image1');
+   const img2 = document.getElementById('image2');
+   if (img1) img1.style.pointerEvents = 'none';
+   if (img2) img2.style.pointerEvents = 'none';
 
   const [image1, image2] = currentPair;
-   // Backend updateRatings needs winner/loser. For a draw, Elo is calculated differently.
-   // Let's assume the backend vote endpoint can handle a 'draw' result type
-   // and adjusts both ratings based on the expected outcome being 0.5 for both.
-   // The current backend updateRatings doesn't use the result type, it just assumes winner/loser.
-   // A simple way to handle draw with current backend updateRatings is to call it twice, A wins vs B, then B wins vs A.
-   // Or, modify backend updateRatings to accept result type.
-   // Let's stick to the current backend's simple winner/loser and note this limitation or modify backend.
-   // **Modification required in backend updateRatings or vote endpoint logic for draws.**
-   // Given the current backend `updateRatings` logic, it cannot handle a draw directly with winner/loser inputs.
-   // We need to pass 'draw' and modify the backend vote endpoint.
+   // Note: The current backend '/api/vote' and '/api/normal-vote' endpoints likely DON'T
+   // handle the 'result: "draw"' field. They expect a winner/loser pair for the basic Elo update.
+   // Handling a draw correctly might require backend changes (e.g., adjust both ratings towards expected mean).
+   // For now, sending 'draw' might be ignored or cause unexpected behavior depending on backend implementation.
+   // A *simple* frontend workaround (but mathematically dubious for strict Elo) could be to just fetch the next match without saving.
+   // Let's proceed assuming the backend *might* handle 'draw' or will ignore it gracefully.
+   console.warn("Sending 'draw' vote. Backend support for this is not guaranteed in the current implementation.");
 
-   // Modified frontend voteDraw assumes backend endpoint handles 'draw'
-   fetch(`/api/vote/${subset}`, {
+   fetch(getApiUrl('vote', subset), {
      method: 'POST',
      headers: { 'Content-Type': 'application/json' },
      body: JSON.stringify({ winner: image1, loser: image2, result: 'draw' }) // Pass 'draw' result
    })
      .then(res => {
          // Re-enable voting regardless of success/failure
-         document.getElementById('image1').style.pointerEvents = 'auto';
-         document.getElementById('image2').style.pointerEvents = 'auto';
+         if (img1) img1.style.pointerEvents = 'auto';
+         if (img2) img2.style.pointerEvents = 'auto';
 
          if (!res.ok) {
               return res.json().then(err => Promise.reject(err));
@@ -531,11 +843,65 @@ function voteDraw() {
        fetchProgress();
      })
      .catch(err => {
-        console.error('Error recording draw:', err);
+        console.error(`Error recording ${subsetType} draw:`, err);
         alert(`Error recording draw: ${err.message || err.error || 'Unknown error'}`); // Provide user feedback
-        fetchMatch(); // Try fetching next match anyway
+        // Still try to fetch the next match even on error
+        fetchMatch();
         fetchProgress();
      });
+}
+
+/**
+ * Fetches a pair of images to be rated OR signals seeding is needed OR handles no more pairs.
+ */
+function fetchMatch() {
+    if (!subset) {
+        console.warn("fetchMatch called without a selected subset.");
+        return;
+    }
+    // We rely on checkInitializationStatus to handle the seeding state.
+    // This function now primarily gets the next pair *if* we are in head-to-head mode.
+    fetch(getApiUrl('match', subset))
+    .then(response => response.json())
+    .then(data => {
+      const headToHeadContainer = document.querySelector('#head-to-head-ui .image-container');
+       const voteButtons = document.querySelectorAll('#head-to-head-ui button');
+
+      if (data.error) {
+          console.error(`Error fetching match: ${data.error}`);
+          if (headToHeadContainer) headToHeadContainer.innerHTML = `<p>${data.error}</p>`;
+           // Hide vote buttons on error
+           voteButtons.forEach(btn => btn.style.display = 'none');
+          return;
+      }
+
+      if (data.requiresSeeding) {
+          // This case should ideally be caught by checkInitializationStatus, but handle defensively
+          console.warn("fetchMatch returned requiresSeeding. Switching to seeding UI.");
+          uninitializedImages = data.uninitializedImages;
+          showSeedingUI();
+          renderSeedingGallery(uninitializedImages);
+          fetchProgress();
+      } else if (data.image1 && data.image2) {
+          // Success: Got a pair
+          currentPair = [data.image1, data.image2];
+          displayMatch(); // This function now also ensures buttons are visible
+      } else {
+          // No error, not seeding, but no pair returned (e.g., fewer than 2 initialized images)
+          console.log("No more pairs available for matching in this subset.");
+          if (headToHeadContainer) headToHeadContainer.innerHTML = '<p>All available matches completed for this subset. Check rankings or add more images.</p>';
+           // Hide vote buttons
+           voteButtons.forEach(btn => btn.style.display = 'none');
+      }
+    })
+    .catch(err => {
+        console.error('Network or JSON parsing error fetching match:', err);
+        const headToHeadContainer = document.querySelector('#head-to-head-ui .image-container');
+        const voteButtons = document.querySelectorAll('#head-to-head-ui button');
+         if (headToHeadContainer) headToHeadContainer.innerHTML = `<p>Error fetching next match: ${err.message}</p>`;
+          // Hide vote buttons on error
+         voteButtons.forEach(btn => btn.style.display = 'none');
+    });
 }
 
 
@@ -543,29 +909,59 @@ function voteDraw() {
  * Handles the subset change event.
  */
 function changeSubset() {
-  const sel = document.getElementById('subset-select');
-  subset = sel.value;
+  const sel = document.getElementById(subsetSelectElementId);
+  if (!sel) {
+      console.error(`Subset select element #${subsetSelectElementId} not found!`);
+      return;
+  }
+  const newSubset = sel.value;
+  if (!newSubset || newSubset === subset) {
+      return; // No change or invalid selection
+  }
+
+  subset = newSubset;
+  console.log(`Subset changed to: ${subset}`);
+
+  // Update URL query parameter without full reload
+  const url = new URL(window.location);
+  url.searchParams.set('subset', subset);
+  window.history.pushState({ subset: subset }, '', url);
+
+
+  // Reset current pair and uninitialized images
+  currentPair = [];
+  uninitializedImages = [];
+
   // Use checkInitializationStatus for the new subset
   checkInitializationStatus(subset);
 }
 
 /**
- * Confirms and deletes an image.
- * @param {number} imageIndex - The index (1 or 2) of the image to delete.
+ * Confirms and initiates deletion of an image.
+ * @param {number} imageIndex - The index (1 or 2) of the image in the current pair to delete.
  */
 function confirmDelete(imageIndex) {
+  if (currentPair.length < imageIndex || imageIndex < 1) {
+      console.error("Invalid image index for deletion:", imageIndex);
+      return;
+  }
   const image = currentPair[imageIndex - 1];
-  if (confirm(`Are you sure you want to delete "${image}" from subset "${subset}"? This cannot be undone.`)) {
+  if (confirm(`Are you sure you want to delete "${image}" from subset "${subset}"? This action cannot be undone.`)) {
     deleteImage(image);
   }
 }
 
 /**
- * Deletes an image from the subset.
+ * Sends a request to delete an image from the current subset.
  * @param {string} image - The image filename to delete.
  */
 function deleteImage(image) {
-  fetch(`/api/image/${subset}/${image}`, {
+    if (!subset || !image) {
+        console.error("Cannot delete image: subset or image name missing.");
+        return;
+    }
+
+  fetch(getApiUrl('image', subset, image), {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' }
   })
@@ -575,15 +971,18 @@ function deleteImage(image) {
          }
          return res.json();
      })
-    .then(() => {
-        alert(`Image "${image}" deleted.`);
-        fetchMatch(); // Fetch next match or signal seeding
+    .then(data => {
+        alert(`Image "${image}" deleted. ${data.deletedFile ? '(File also removed)' : '(File removal failed or skipped)'}`);
+        // Reset current pair because one image is gone
+        currentPair = [];
+        // Fetch the next match immediately. It might return an error if <2 images remain.
+        fetchMatch();
         fetchProgress(); // Update progress/image counts
     })
     .catch(err => {
-        console.error('Error deleting image:', err);
+        console.error(`Error deleting ${subsetType} image:`, err);
         alert(`Error deleting image: ${err.message || err.error || 'Unknown error'}`);
-        // Even on error, try refreshing the state just in case
+        // Even on error, try refreshing the state, as the image *might* be gone from the list anyway
         fetchMatch();
         fetchProgress();
     });

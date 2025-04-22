@@ -42,15 +42,27 @@
   </div> -->
 
   <!-- NEW: Seeding Gallery Container (Initially Hidden) -->
-   <div id="seeding-gallery" style="display: none;">
-        <h1>Seed Initial Image Ratings</h1>
-         <p>Please give each image a rating from 1 to 10 stars. This will set its initial Elo score (700-1600).</p>
-        <div id="image-seeding-cards" class="image-container">
-            <!-- Image cards will be dynamically inserted here -->
-        </div>
-        <button id="confirm-seeding" onclick="confirmSeedRatings()" disabled>Confirm Seed Ratings</button>
-         <div id="seeding-message" style="margin-top: 10px; color: green;"></div> <!-- Message area -->
-   </div>
+  <div id="seeding-gallery" style="display: none;">
+    <h1>Seed Initial Image Ratings</h1>
+    <p>Please give each image a rating from 1 to 10 stars. This will set its initial Elo score (700-1600).</p>
+
+    <!-- Container for the TOP button -->
+    <div class="confirm-button-container" id="confirm-container-top">
+        <button class="confirm-seeding-button" disabled>Confirm Seed Ratings</button> <!-- Use class, remove id -->
+    </div>
+
+    <div id="image-seeding-cards" class="image-container">
+        <!-- Image cards will be dynamically inserted here -->
+    </div>
+
+    <!-- Seeding message can go here, between gallery and bottom button -->
+    <div id="seeding-message" style="margin-top: 10px; color: green;"></div>
+
+    <!-- Container for the BOTTOM button -->
+    <div class="confirm-button-container" id="confirm-container-bottom">
+        <button class="confirm-seeding-button" disabled>Confirm Seed Ratings</button> <!-- Use class, remove id -->
+    </div>
+  </div>
 
   <!-- Existing: Head-to-Head UI Container (Initially Hidden) -->
   <div id="head-to-head-ui" style="display: none;">
@@ -90,7 +102,7 @@
     </div>
   </div>
 
-  <script src="script-normal.js" defer></script>
+  <script src="script.js" defer></script>
   <script src="darkModeScript.js"></script>
 </body>
 </html>

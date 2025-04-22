@@ -213,7 +213,6 @@ body {
   padding: 10px;
   border-radius: 5px;
   box-sizing: border-box;
-  height:100%;
 }
 
 /* Default: no upscaling past base resolution, aspect ratio preserved */
@@ -548,6 +547,8 @@ Star rating section
   border: none; /* Remove border */
   max-width: 100vw; /* Allow it to take full width */
   box-sizing: border-box; /* Include padding in width calculation */
+  height: 60vh;
+  margin: 30px;
 }
 
 /* Style individual image cards in the seeding gallery */
@@ -564,6 +565,7 @@ Star rating section
  box-sizing: border-box;
  text-align: center;
  overflow: hidden;
+ height: auto;
 }
 
 body.dark-mode #seeding-gallery #image-seeding-cards .image-wrapper {
@@ -576,6 +578,7 @@ body.dark-mode #seeding-gallery #image-seeding-cards .image-wrapper {
  width: 100%; /* Image fills the width of its parent wrapper */
  max-width: 100%; /* Ensure it doesn't exceed parent width */
  height: auto; /* Maintain aspect ratio */
+ max-height: 60vh;
  object-fit: contain;
  border: 1px solid #ddd;
  border-radius: 3px;
@@ -663,24 +666,55 @@ body.dark-mode .star-rating label:hover ~ label {
 }
 
 
-/* Style the confirm seeding button */
-#confirm-seeding {
- margin-top: 20px;
- padding: 10px 20px;
- font-size: 1.1em;
- background-color: #4CAF50; /* Green */
- color: white;
- border: none;
- border-radius: 5px;
- cursor: pointer;
- transition: background-color 0.2s ease;
+/* Add these new styles to styles.css */
+
+.confirm-button-container {
+  text-align: center; /* Center the button inside the container */
+  margin-top: 20px;    /* Space above the button container */
+  margin-bottom: 20px; /* Space below the button container */
 }
-#confirm-seeding:hover:not(:disabled) {
- background-color: #45a049;
+
+/* Update the button style to use the class selector */
+.confirm-seeding-button {
+  /* Copy existing styles from #confirm-seeding */
+  padding: 10px 20px;
+  font-size: 1.1em;
+  background-color: #4CAF50; /* Green */
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
 }
-#confirm-seeding:disabled {
- background-color: #ccc;
- cursor: not-allowed;
+
+.confirm-seeding-button:hover:not(:disabled) {
+  /* Copy existing styles */
+  background-color: #45a049;
+}
+
+.confirm-seeding-button:disabled {
+  /* Copy existing styles */
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+/* Dark mode overrides for the new class */
+body.dark-mode .confirm-seeding-button:not(:disabled) {
+  background-color: #3f51b5; /* Indigo */
+}
+body.dark-mode .confirm-seeding-button:hover:not(:disabled) {
+  background-color: #303f9f; /* Darker Indigo */
+}
+body.dark-mode .confirm-seeding-button:disabled {
+  background-color: #555;
+}
+
+/* Optional: Adjust margin specifically for the top/bottom if needed */
+#confirm-container-top {
+    margin-bottom: 15px; /* Slightly less margin below top button */
+}
+#confirm-container-bottom {
+    margin-top: 15px; /* Slightly less margin above bottom button */
 }
 
 /* Dark mode for seeding elements */
