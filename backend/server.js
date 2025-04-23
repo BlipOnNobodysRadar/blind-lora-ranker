@@ -226,104 +226,199 @@ app.post('/api/apply-tags/normal/:subset', async (req, res) => {
 
 
 /**
- * Loads all subsets from the AI_IMAGES_DIR (i.e. LoRA images).
+ * Loads all AI subsets by checking both the AI_images directory AND existing data files.
  */
 function loadAllSubsets() {
-  if (!fs.existsSync(AI_IMAGES_DIR)) {
-    console.log('AI_images directory not found. Creating empty directory.');
-    fs.mkdirSync(AI_IMAGES_DIR);
-    return;
+  const discoveredSubsets = new Set();
+
+  // 1. Discover from AI_images directory
+  if (fs.existsSync(AI_IMAGES_DIR)) {
+      try {
+          fs.readdirSync(AI_IMAGES_DIR)
+            .filter(dir => {
+                const dirPath = path.join(AI_IMAGES_DIR, dir);
+                // Ensure it's actually a directory
+                try {
+                    return fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory();
+                } catch (statErr) {
+                    console.warn(`Error stating directory ${dirPath}: ${statErr.message}. Skipping.`);
+                    return false;
+                }
+            })
+            .forEach(subset => discoveredSubsets.add(subset));
+            console.log(`Discovered subsets from AI_images directory: ${[...discoveredSubsets].join(', ')}`);
+      } catch (err) {
+          console.error(`Error reading AI_images directory: ${err.message}`);
+      }
+  } else {
+      console.log('AI_images directory not found. Trying to load from data files only.');
+      // Optional: Create AI_images directory if it doesn't exist
+      // fs.mkdirSync(AI_IMAGES_DIR);
   }
 
-  const allSubsets = fs.readdirSync(AI_IMAGES_DIR)
-    .filter(dir => {
-      const dirPath = path.join(AI_IMAGES_DIR, dir);
-      return fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory();
-    });
-
-  if (allSubsets.length === 0) {
-    console.log('\nNo AI image subdirectories found. Instructions:\n');
-    console.log('1. Create subdirectories in the "AI_images" folder.');
-    console.log('2. Add PNG images with LoRA metadata into those subdirectories.');
-    console.log('Example:');
-    console.log('AI_images/');
-    console.log('  ├── subset1/');
-    console.log('  │   ├── image1.png');
-    console.log('  │   └── image2.png');
-    console.log('  └── subset2/');
-    console.log('      ├── image3.png');
-    console.log('      └── image4.png\n');
-    console.log('After adding images, restart the server and reload http://localhost:3000.');
-    return;
+  // 2. Discover from data directory
+  if (fs.existsSync(DATA_DIR)) {
+       try {
+          fs.readdirSync(DATA_DIR)
+            // Match ratings-<subset>.json but NOT ratings-normal-<subset>.json
+            .filter(file => /^ratings-(?!normal-).+\.json$/.test(file))
+            .forEach(file => {
+                const match = file.match(/^ratings-(.+)\.json$/);
+                if (match && match[1]) {
+                    if (!discoveredSubsets.has(match[1])) {
+                       console.log(`Discovered subset "${match[1]}" from data file: ${file}`);
+                    }
+                    discoveredSubsets.add(match[1]);
+                }
+            });
+      } catch(err) {
+           console.error(`Error reading data directory: ${err.message}`);
+      }
+  } else {
+      console.log('Data directory not found. Cannot discover subsets from data files.');
+       // Optional: Create data directory if it doesn't exist
+       // fs.mkdirSync(DATA_DIR);
   }
 
-  allSubsets.forEach(subset => {
-    loadSubset(subset);
+
+  const allSubsetNames = Array.from(discoveredSubsets);
+
+  if (allSubsetNames.length === 0) {
+      console.log('\nNo AI image subsets found either in "AI_images" directory or as "data/ratings-*.json" files.');
+      console.log('To get started:');
+      console.log('1. Create subdirectories in the "AI_images" folder.');
+      console.log('2. Add PNG images with LoRA metadata into those subdirectories.');
+      console.log('3. Run the rating process to generate data files.');
+      console.log('OR, if you only have data files, ensure they are in the "data" directory.');
+      return;
+  }
+
+  console.log(`Attempting to load data for subsets: ${allSubsetNames.join(', ')}`);
+  allSubsetNames.forEach(subset => {
+      loadSubset(subset); // Call the modified loadSubset
   });
 }
 
 /**
- * Loads a single LoRA-based subset (from AI_IMAGES_DIR).
- * - Reads PNG files
- * - Extracts LoRA model from metadata
- * - Builds subset data for images and LoRAs
- * - Initializes ratings to null if not found in saved data
- */
+* Loads a single LoRA-based subset, prioritizing data file and optionally reading image files if directory exists.
+*/
 function loadSubset(subset) {
+  console.log(`Loading AI subset "${subset}"...`);
   const subsetPath = path.join(AI_IMAGES_DIR, subset);
-  const files = fs.readdirSync(subsetPath).filter(file => file.toLowerCase().endsWith('.png'));
-
-  // Load previous ratings data if it exists
-  let savedData = { ratings: {}, matchCount: {}, loraModelRatings: {} };
   const ratingFile = path.join(DATA_DIR, `ratings-${subset}.json`);
+
+  let savedData = { ratings: {}, matchCount: {}, loraModelRatings: {} };
+  let directoryExists = false;
+  let files = [];
+
+  // 1. Load saved ratings data FIRST (this is the source of truth for "offline" mode)
   if (fs.existsSync(ratingFile)) {
-    try {
-      savedData = JSON.parse(fs.readFileSync(ratingFile, 'utf8'));
-    } catch (e) {
-      console.error(`Error parsing rating file ${ratingFile}:`, e);
-      // Reset saved data if parsing fails
-      savedData = { ratings: {}, matchCount: {}, loraModelRatings: {} };
-    }
-  }
-
-
-  let images = {};
-  let loraModels = {};
-
-  for (const file of files) {
-    const loraModel = getPngMetadata(path.join(subsetPath, file));
-    if (loraModel === '' && !savedData.ratings.hasOwnProperty(file)) {
-      // Skip images with no metadata if they haven't been rated before.
-      // If they *were* rated, we keep them with their old rating.
-      continue;
-    }
-
-    // Initialize or load image data
-    // Check if rating exists in savedData.ratings
-    const isInitialized = savedData.ratings.hasOwnProperty(file);
-
-    images[file] = {
-      // If not in saved data, rating is null (needs seeding)
-      rating: isInitialized ? savedData.ratings[file] : null,
-      // If not in saved data, matches is null (needs seeding)
-      matches: isInitialized ? savedData.matchCount[file] ?? 0 : null, // Default matches to 0 if rating exists but matches doesn't
-      lora: loraModel
-    };
-
-    // Initialize or load LoRA model data (keep default 1000/0 for LoRAs)
-    if (loraModel) {
-      if (!loraModels[loraModel]) {
-        loraModels[loraModel] = {
-          rating: savedData.loraModelRatings?.[loraModel]?.rating ?? 1000,
-          matches: savedData.loraModelRatings?.[loraModel]?.count ?? 0
-        };
+      try {
+          savedData = JSON.parse(fs.readFileSync(ratingFile, 'utf8'));
+          console.log(`Successfully loaded data file ${ratingFile} for subset "${subset}".`);
+      } catch (e) {
+          console.error(`Error parsing rating file ${ratingFile} for subset "${subset}":`, e.message, "- Resetting saved data.");
+          // Reset saved data if parsing fails, but continue loading if possible
+          savedData = { ratings: {}, matchCount: {}, loraModelRatings: {} };
       }
-    }
+  } else {
+       console.log(`No data file found for subset "${subset}" at ${ratingFile}. Will initialize from images if directory exists.`);
   }
 
+  // 2. Check if image directory exists and read files IF it does
+  try {
+      if (fs.existsSync(subsetPath) && fs.statSync(subsetPath).isDirectory()) {
+          directoryExists = true;
+          files = fs.readdirSync(subsetPath).filter(file => file.toLowerCase().endsWith('.png'));
+          console.log(`Image directory found for subset "${subset}". Found ${files.length} PNG files.`);
+      } else {
+           console.log(`Image directory NOT found for subset "${subset}" at ${subsetPath}. Loading in "offline" mode from data only.`);
+      }
+  } catch (dirErr) {
+      console.warn(`Error accessing image directory for subset "${subset}" at ${subsetPath}: ${dirErr.message}. Loading in "offline" mode.`);
+      directoryExists = false;
+  }
+
+
+  let images = {}; // Store image-specific data (rating, matches, associated LoRA)
+  let loraModels = {}; // Store aggregated LoRA data (rating, matches)
+
+  // 3. Initialize LoRA models from saved data FIRST
+  if (savedData.loraModelRatings) {
+      for (const loraName in savedData.loraModelRatings) {
+          if (!loraModels[loraName]) { // Avoid overwriting if somehow already initialized
+               loraModels[loraName] = {
+                  rating: savedData.loraModelRatings[loraName]?.rating ?? 1000, // Default if property missing
+                  matches: savedData.loraModelRatings[loraName]?.count ?? 0     // Default if property missing
+              };
+          }
+      }
+      console.log(`Initialized ${Object.keys(loraModels).length} LoRA models from saved data for subset "${subset}".`);
+  }
+
+  // 4. Process image files ONLY if the directory exists
+  if (directoryExists) {
+      for (const file of files) {
+          const imagePath = path.join(subsetPath, file);
+          const loraModelFromFile = getPngMetadata(imagePath); // Can return '', 'NONE', or 'LoraName:Strength'
+
+          // Determine if image existed in saved data
+          const ratingExistsInSaved = savedData.ratings && savedData.ratings.hasOwnProperty(file);
+          const savedRating = ratingExistsInSaved ? savedData.ratings[file] : null;
+          const savedMatches = ratingExistsInSaved ? (savedData.matchCount[file] ?? 0) : null; // Use saved matches if rating exists
+
+          // Skip PNGs with no metadata *if* they weren't already rated/saved
+          // Allow 'NONE' only if previously rated
+          if (!loraModelFromFile && !ratingExistsInSaved) {
+              // console.log(`Skipping new image "${file}" with no metadata.`);
+              continue;
+          }
+
+          // Initialize image data: Use saved rating/matches if available, otherwise null (requires seeding)
+          images[file] = {
+              rating: savedRating,
+              matches: savedMatches,
+              lora: loraModelFromFile || (ratingExistsInSaved ? (savedData.images?.[file]?.lora ?? '') : '') // Use LoRA from file if possible, fallback to saved LoRA if file has none/error but was saved
+          };
+
+           // Update/Initialize LoRA model data based on the file's metadata
+           // Only add/update if a valid LoRA name was extracted from the file
+          if (loraModelFromFile && loraModelFromFile !== 'NONE' && loraModelFromFile !== '') {
+              if (!loraModels[loraModelFromFile]) {
+                   // If this LoRA wasn't in the saved JSON, initialize it now
+                  loraModels[loraModelFromFile] = {
+                      rating: 1000, // New LoRA discovered from PNG
+                      matches: 0
+                  };
+                   console.log(`Discovered new LoRA "${loraModelFromFile}" from image "${file}".`);
+              }
+               // We don't update rating/matches here; that happens during voting or loading from JSON.
+               // We just ensure the LoRA model entry exists.
+          }
+      }
+  }
+
+  // 5. Populate image data for images ONLY present in saved data (directory/file missing)
+  // This isn't strictly necessary for LoRA comparison but maintains consistency if needed elsewhere
+  if (savedData.ratings) {
+      for (const savedFile in savedData.ratings) {
+          if (!images[savedFile]) { // If not already processed from an existing file
+               console.log(`Adding image "${savedFile}" from saved data (file missing).`);
+               images[savedFile] = {
+                  rating: savedData.ratings[savedFile],
+                  matches: savedData.matchCount[savedFile] ?? 0,
+                  lora: savedData.images?.[savedFile]?.lora ?? '' // Try to get LoRA from old format if exists
+               };
+          }
+      }
+  }
+
+
+  // Final assignment to the global structure
   subsets[subset] = { images, loraModels };
-  console.log(`Loaded AI subset "${subset}". Images: ${Object.keys(images).length}`);
+  console.log(`Finished loading AI subset "${subset}". Images tracked: ${Object.keys(images).length}, LoRAs tracked: ${Object.keys(loraModels).length}. Mode: ${directoryExists ? 'Online' : 'Offline'}`);
 }
+
 
 /**
  * Loads all subsets from the NORMAL_IMAGES_DIR (i.e. normal images with no LoRA metadata).
@@ -713,8 +808,11 @@ function checkForUninitialized(subsetType, subsetName) {
 // ------------- AI (LoRA) routes -------------
 
 /** List AI subsets */
+// GET /api/subsets - List available AI subsets (now includes offline ones)
 app.get('/api/subsets', (req, res) => {
-  res.json(Object.keys(subsets));
+  // Sort subset names alphabetically for consistent UI
+  const sortedSubsetNames = Object.keys(subsets).sort((a, b) => a.localeCompare(b));
+  res.json(sortedSubsetNames);
 });
 
 /** Get a match pair or signal seeding needed from an AI subset */
@@ -846,22 +944,35 @@ app.get('/api/elo-rankings/:subset', (req, res) => {
   res.json(ranked);
 });
 
-/** Get LoRA-level Elo ranking for an AI subset */
+// GET /api/lora-rankings/:subset - Get LoRA rankings for a subset
 app.get('/api/lora-rankings/:subset', (req, res) => {
   const subset = req.params.subset;
-  if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
+  if (!subsets[subset]) {
+    // Check if it exists in normalSubsets as a fallback? No, stick to AI subsets.
+    console.warn(`Request for LoRA rankings for unknown or unloaded AI subset: ${subset}`);
+    return res.status(404).json({ error: `AI Subset '${subset}' not found or failed to load.` });
+  }
 
-  const { loraModels } = subsets[subset];
+  const { loraModels } = subsets[subset]; // Should be populated correctly by modified loadSubset
+
+  if (!loraModels || Object.keys(loraModels).length === 0) {
+     console.log(`No LoRA models found or loaded for subset ${subset}.`);
+     // Return empty array instead of error, means no LoRAs to rank
+     return res.json([]);
+  }
+
+
   const ranked = Object.keys(loraModels)
-    .sort((a, b) => loraModels[b].rating - loraModels[a].rating)
+    .sort((a, b) => (loraModels[b]?.rating ?? 0) - (loraModels[a]?.rating ?? 0)) // Handle potentially null/undefined rating defensively
     .map(lm => ({
       lora: lm,
-      rating: loraModels[lm].rating,
-      matches: loraModels[lm].matches
+      rating: loraModels[lm]?.rating ?? 1000, // Default to 1000 if rating somehow missing
+      matches: loraModels[lm]?.matches ?? 0   // Default to 0 if matches somehow missing
     }));
 
   res.json(ranked);
 });
+
 
 /** Delete an image from an AI subset */
 app.delete('/api/image/:subset/:image', (req, res) => {
