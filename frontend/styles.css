@@ -270,41 +270,92 @@ body.scale-images .image-wrapper img {
 /* ------------------------------------------------------------------
    5. Ranking & Summary Containers
 ------------------------------------------------------------------ */
+/* Widen the main container for rankings */
 .ranking-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 90%;
-  max-width: 800px;
-  margin: 20px auto;
+  display: flex; /* Keep flex for column layout of items */
+  flex-direction: column; /* Stack items vertically */
+  align-items: center; /* Center items horizontally IF they don't take full width */
+  width: 90%; /* Adjust width as desired */
+  max-width: 1100px; /* Adjust max-width as desired */
+  margin: 10px auto 20px auto; /* Center horizontally, add vertical margin */
 }
 
+/* Style individual LoRA ranking items using CSS Grid */
 .ranking-item {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
+  display: grid;
+  width: 100%; /* Make items take full width of the container */
+  grid-template-columns: 1fr auto auto;
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "name   rating  matches"
+    "prog   prog    prog";
+  gap: 4px 15px;
   align-items: center;
-  width: 100%;
-  margin: 5px 0;
-  padding: 10px;
+  margin: 8px 0;
+  padding: 12px 15px;
   background: #fff;
   border: 1px solid #ddd;
-  border-radius: 4px;
+  border-radius: 5px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+  box-sizing: border-box; /* Include padding/border in width */
 }
 
-.ranking-item img {
-  max-width: 100px;
-  margin-right: 20px;
+/* ... (Keep span:nth-of-type(1) styling) ... */
+.ranking-item span:nth-of-type(1) { /* LoRA Name Span */
+  grid-area: name;
+  text-align: left;
+  font-weight: bold;
+  word-break: break-all;
+  overflow-wrap: break-word;
+  line-height: 1.3;
+}
+.ranking-item span:nth-of-type(1) strong {
+    font-weight: 600;
+}
+
+
+.ranking-item span:nth-of-type(2) { /* Rating Span */
+  grid-area: rating;
+  text-align: right;
+  white-space: nowrap;
+  font-size: 0.95em;
+  color: #333; /* Default color */
+}
+
+.ranking-item span:nth-of-type(3) { /* Matches Span */
+  grid-area: matches;
+  text-align: right;
+  white-space: nowrap;
+  font-size: 0.95em;
+  color: #555; /* Default color */
+}
+
+/* ... (Keep progress bar styling) ... */
+.ranking-item .progress-bar-container {
+  grid-area: prog;
+  width: 100%;
+  margin-top: 8px;
+  position: relative;
+  height: 10px;
+  overflow: hidden;
+  border: 1px solid #ccc;
+  background: #f3f3f3;
   border-radius: 3px;
 }
+.ranking-item .progress-bar-container .progress-bar-background {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #e0e0e0;
+}
+.ranking-item .progress-bar-container .progress-bar {
+    position: absolute; top: 0; left: 0; height: 100%; background: #4caf50; transition: width 0.3s ease;
+}
+
 
 /* Summary box */
 .summary {
-  width: 80%;
-  max-width: 600px;
-  margin: 20px auto;
-  margin-top: 20px;   /* Some vertical spacing */
-  padding: 10px;
+  width: 90%; /* Match container width */
+  max-width: 1100px; /* Match container max-width */
+  margin: 20px auto; /* Center horizontally */
+  padding: 15px;
   background: #f9f9f9;
   border: 1px solid #ccc;
   border-radius: 5px;
@@ -350,24 +401,34 @@ body.scale-images .image-wrapper img {
 ------------------------------------------------------------------ */
 .ranking-header {
   display: flex;
-  justify-content: space-between;
-  width: 80%;
-  max-width: 600px;
-  margin: 10px auto;
+  justify-content: space-between; /* Distribute space */
+  width: 90%; /* Match container width */
+  max-width: 1100px; /* Match container max-width */
+  margin: 15px auto 5px auto; /* Center horizontally, adjust vertical margin */
+  padding: 0 15px; /* Add padding to align roughly with item content */
+  box-sizing: border-box; /* Include padding in width */
   cursor: pointer;
+  border-bottom: 2px solid #ccc; /* Add separator */
+  padding-bottom: 5px;
 }
 .ranking-header span {
-  flex: 1;
-  text-align: center;
+  /* Adjust flex basis for better alignment with grid columns */
+  flex: 1 1 auto; /* Allow flexible shrinking/growing for name */
+  text-align: left; /* Align header text left by default */
   font-weight: bold;
   padding: 5px 0;
 }
-.ranking-header span.sort-asc::after {
-  content: " ▲";
+/* Target specific headers for right alignment */
+.ranking-header span[data-sort="rating"],
+.ranking-header span[data-sort="matches"] {
+  flex: 0 1 100px; /* Give fixed basis, allow shrinking */
+  text-align: right; /* Align these headers right */
+  margin-left: 15px; /* Add space from the name column */
 }
-.ranking-header span.sort-desc::after {
-  content: " ▼";
-}
+
+.ranking-header span.sort-asc::after { content: " ▲"; font-size: 0.8em; }
+.ranking-header span.sort-desc::after { content: " ▼"; font-size: 0.8em; }
+
 
 /* ------------------------------------------------------------------
    8. Tables & Compare LoRA
@@ -519,7 +580,42 @@ body.dark-mode .image-wrapper button {
 body.dark-mode .ranking-item {
   background: #2e2e2e;
   border: 1px solid #444;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
+
+body.dark-mode .ranking-item span:nth-of-type(1) { /* Name */
+  color: #ddd;
+}
+body.dark-mode .ranking-item span:nth-of-type(1) strong {
+    color: #eee;
+}
+
+/* -->> IMPROVED DARK MODE CONTRAST <<-- */
+body.dark-mode .ranking-item span:nth-of-type(2) { /* Rating */
+  color: #ccc; /* Lighter gray */
+}
+body.dark-mode .ranking-item span:nth-of-type(3) { /* Matches */
+  color: #bbb; /* Lighter gray */
+}
+
+body.dark-mode .ranking-item .progress-bar-container {
+  border: 1px solid #555;
+  background: #444;
+}
+body.dark-mode .ranking-item .progress-bar-container .progress-bar-background {
+    background: #555;
+}
+body.dark-mode .ranking-item .progress-bar-container .progress-bar {
+    background: #388e3c; /* Slightly darker green */
+}
+
+body.dark-mode .ranking-header {
+  border-bottom-color: #555; /* Darker border */
+}
+body.dark-mode .ranking-header span {
+  color: #ccc; /* Lighter header text */
+}
+
 
 /* Dark mode for tables */
 body.dark-mode table {
