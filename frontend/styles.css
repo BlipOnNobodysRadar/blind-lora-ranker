@@ -434,10 +434,18 @@ body.scale-images .image-wrapper img {
    8. Tables & Compare LoRA
 ------------------------------------------------------------------ */
 .table-container {
-  margin-top: 20px;
-  margin: 20px auto;
-  max-width: 90vw;
-  overflow-x: auto;
+  display: block; /* Ensure it's a block-level element */
+  margin-left: auto;  /* Explicitly set left margin to auto */
+  margin-right: auto; /* Explicitly set right margin to auto */
+  margin-top: 20px;     /* Add top margin */
+  margin-bottom: 20px;  /* Add bottom margin */
+  max-width: 95vw;      /* Slightly wider max-width? Adjust as needed */
+  overflow-x: auto;     /* Allow horizontal scrolling for the table inside */
+  box-sizing: border-box; /* Good practice */
+}
+
+#comparison-table {
+  margin: auto;
 }
 
 table {
@@ -468,6 +476,33 @@ th.sort-desc::after {
 .highlight-diff-negative {
   background-color: #ffe0e0;
 }
+
+
+/* NEW: Styling for LoRA Name column in compare-loras.html table */
+/* Apply to both header and data cells for consistent width calculation */
+#comparison-table th.lora-name-cell,
+#comparison-table td.lora-name-cell {
+  max-width: 300px; /* Adjust max width as needed */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left; /* Ensure LoRA names align left */
+}
+
+/* Ensure the header text itself aligns left */
+#comparison-table th.lora-name-cell {
+    text-align: left;
+}
+
+
+/* Keep existing highlight classes for light mode */
+.highlight-diff-positive {
+  background-color: #e0ffe0; /* Light green */
+}
+.highlight-diff-negative {
+  background-color: #ffe0e0; /* Light red */
+}
+
 
 /* ------------------------------------------------------------------
    9. Notifications
@@ -628,6 +663,21 @@ body.dark-mode th {
 body.dark-mode td {
   color: #ccc;
 }
+/* NEW: Dark mode overrides for comparison table highlights */
+body.dark-mode .highlight-diff-positive {
+  background-color: #1a4d2e; /* Darker green background */
+  color: #a5d6a7; /* Lighter green text */
+}
+body.dark-mode .highlight-diff-negative {
+  background-color: #5a1a1a; /* Darker red/maroon background */
+  color: #ff8a80; /* Lighter red text */
+}
+
+/* Ensure LoRA name cell has good contrast in dark mode */
+body.dark-mode #comparison-table td.lora-name-cell {
+    color: #ddd; /* Adjust if needed based on your dark mode text color */
+}
+
 
 /* Dark mode for summary, notifications, etc. */
 body.dark-mode .summary {

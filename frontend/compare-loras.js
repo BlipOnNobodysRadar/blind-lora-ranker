@@ -99,22 +99,19 @@ function renderTable() {
   // --- Build Headers ---
   const headRow = document.createElement('tr');
 
-  // LoRA column
-  createHeaderCell(headRow, 'LoRA', 'lora');
+  // LoRA column - ADD CLASS
+  const loraTh = createHeaderCell(headRow, 'LoRA', 'lora');
+  loraTh.classList.add('lora-name-cell'); // Add class to header
 
-  // Avg Rating
+  // Avg Rating, Std Dev, OPC headers
   createHeaderCell(headRow, 'Avg Rating', 'avgRating');
-
-  // Std Dev Rating
   createHeaderCell(headRow, 'Std Dev', 'stdDev');
-
-  // Overperformance Count
   createHeaderCell(headRow, 'OPC', 'opc');
 
-  // For each chosen subset, add rating & matches & diff (if more than one subset)
+  // Per-subset headers (order fixed previously)
   chosenSubsets.forEach((subset, i) => {
-    createHeaderCell(headRow, `${getSubsetDisplayName(subset, i)} Rating`, `rating:${subset}`);
     createHeaderCell(headRow, `${getSubsetDisplayName(subset, i)} Matches`, `matches:${subset}`);
+    createHeaderCell(headRow, `${getSubsetDisplayName(subset, i)} Rating`, `rating:${subset}`);
     if (chosenSubsets.length > 1 && baselineSubset && subset !== baselineSubset) {
       createHeaderCell(headRow, `Diff vs ${getBaselineDisplayName()}`, `diff:${subset}`);
     }
@@ -122,10 +119,8 @@ function renderTable() {
 
   tableHead.appendChild(headRow);
 
-  // Compute subset-average ratings for OPC calculation
+  // --- Compute subset averages & Prepare Data (Keep this logic) ---
   const subsetAverages = computeSubsetAverages();
-
-  // Filter & Prepare Data
   let rowsData = Object.keys(comparisonData)
     .filter(lora => lora.toLowerCase().includes(searchTerm))
     .map(lora => {
@@ -136,38 +131,32 @@ function renderTable() {
       return { lora, data, avgRating, stdDev, opc };
     });
 
-  // Sort data
+  // Sort data (Keep this logic)
   rowsData.sort((a, b) => compareSort(a, b));
-
-  const baselineRatingMap = {};
-  chosenSubsets.forEach(s => {
-    baselineRatingMap[s] = comparisonData[rowsData[0]?.lora]?.[s]?.rating ?? 0;
-  });
 
   // --- Build Rows ---
   rowsData.forEach(item => {
     const row = document.createElement('tr');
 
-    // LoRA name
-    createCell(row, item.lora);
+    // LoRA name cell - ADD CLASS and TITLE attribute
+    const loraTd = createCell(row, item.lora);
+    loraTd.classList.add('lora-name-cell'); // Add class to cell
+    loraTd.title = item.lora; // Add title attribute for hover tooltip
 
-    // Avg Rating
+    // Avg Rating, Std Dev, OPC cells
     createCell(row, item.avgRating.toFixed(2));
-
-    // Std Dev Rating
     createCell(row, item.stdDev.toFixed(2));
-
-    // OPC
     createCell(row, item.opc);
 
+    // Per-subset data cells (order fixed previously)
     const baselineRating = item.data[baselineSubset]?.rating ?? 0;
-
     chosenSubsets.forEach((subset, i) => {
       const rating = item.data[subset]?.rating ?? 0;
       const matches = item.data[subset]?.matches ?? 0;
-      createCell(row, rating.toFixed(2));
-      createCell(row, matches);
+      createCell(row, matches); // Matches cell
+      createCell(row, rating.toFixed(2)); // Rating cell
 
+      // Diff cell styling
       if (chosenSubsets.length > 1 && subset !== baselineSubset) {
         const diff = rating - baselineRating;
         const diffTd = createCell(row, (diff >= 0 ? '+' : '') + diff.toFixed(2));
@@ -179,7 +168,7 @@ function renderTable() {
     tableBody.appendChild(row);
   });
 
-  // Add sorting handlers
+  // Add sorting handlers (Keep this logic)
   headRow.querySelectorAll('th').forEach(th => {
     th.onclick = () => {
       const field = th.dataset.field;
@@ -188,14 +177,15 @@ function renderTable() {
         currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
       } else {
         currentSort.field = field;
-        currentSort.direction = 'asc';
+        currentSort.direction = 'asc'; // Default to asc for new column
       }
-      renderTable();
+      renderTable(); // Re-render with new sort
     };
   });
 
-  updateSortIndicator();
+  updateSortIndicator(); // Apply initial sort indicator
 }
+
 
 /**
  * Returns a display name for the subset, either the actual name or a generic label.
@@ -289,8 +279,11 @@ function computeSubsetAverages() {
 function createHeaderCell(parentRow, text, field) {
   let th = document.createElement('th');
   th.textContent = text;
-  th.dataset.field = field;
+  if (field) { // Only add dataset if field is provided
+      th.dataset.field = field;
+  }
   parentRow.appendChild(th);
+  return th; // Return the created element
 }
 
 /**
@@ -300,7 +293,7 @@ function createCell(row, text) {
   const td = document.createElement('td');
   td.textContent = text;
   row.appendChild(td);
-  return td;
+  return td; // Return the created element
 }
 
 /**
