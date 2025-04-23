@@ -974,26 +974,68 @@ function updateRatings(winner, loser) {
 
 // --- Matchmaking Helper ---
 
-/** Selects the next pair for comparison */
+/**
+ * Selects an optimal pair among a set of images based on match count and Elo difference.
+ * This function should only be called when all images are initialized (rating !== null).
+ */
 function selectPair(images) {
-    const keys = Object.keys(images).filter(img => images[img].rating !== null);
+    const keys = Object.keys(images).filter(img => images[img].rating !== null); // Only consider initialized images
     if (keys.length < 2) return [];
 
-    // Simplified random pair selection (replace with priority logic if needed)
-    // For now, just pick two different random images
+    const getPriority = (img1, img2) => {
+        const img1Data = images[img1];
+        const img2Data = images[img2];
+        const img1Matches = img1Data.matches || 0;
+        const img2Matches = img2Data.matches || 0;
+        // Use default Elo of 1000 if somehow null, though they should be initialized
+        const ratingDiff = Math.abs((img1Data.rating ?? 1000) - (img2Data.rating ?? 1000));
+
+        // Prioritize images with fewer matches. Higher score for lower matches.
+        const matchScore = 1 / (Math.min(img1Matches, img2Matches) + 1); // Add 1 to avoid division by zero
+
+        // Prioritize images closer in Elo rating. Higher score for smaller difference.
+        // Scale difference (e.g., max diff could be ~1000?); 1000 - diff gives higher score for low diff.
+        const eloScore = Math.max(0, 1000 - ratingDiff); // Ensure score isn't negative
+
+        // Combine scores - adjust weighting if needed
+        let score = matchScore * eloScore;
+
+        // Slightly deprioritize matching images from the same LoRA (if applicable)
+        if (img1Data.lora && img1Data.lora === img2Data.lora && img1Data.lora !== 'NONE' && img1Data.lora !== '') {
+            score *= 0.9; // Apply a small penalty
+        }
+        return score;
+    };
+
+    // Find the pair with the highest priority score
+    let bestPair = []; // Initialize empty
+    let bestScore = -Infinity; // Start with lowest possible score
+
+    // Iterate through all possible unique pairs
+    for (let i = 0; i < keys.length; i++) {
+        for (let j = i + 1; j < keys.length; j++) {
+            const score = getPriority(keys[i], keys[j]);
+            if (score > bestScore) {
+                bestScore = score;
+                bestPair = [keys[i], keys[j]];
+            }
+        }
+    }
+
+    // Randomize the order within the best pair to avoid bias from position
+    if (bestPair.length === 2 && Math.random() > 0.5) {
+        [bestPair[0], bestPair[1]] = [bestPair[1], bestPair[0]];
+    }
+
+    return bestPair;
+
+    /* --- REMOVE OR KEEP COMMENTED OUT: Simplified random pair selection ---
     let idx1 = Math.floor(Math.random() * keys.length);
     let idx2 = Math.floor(Math.random() * keys.length);
     while (idx2 === idx1) {
          idx2 = Math.floor(Math.random() * keys.length);
     }
     return [keys[idx1], keys[idx2]];
-    // NOTE: Keep the original priority logic if you prefer that matchmaking method
-    /*
-    const getPriority = (img1, img2) => { ... }; // Original priority calculation
-    let bestPair = [keys[0], keys[1]];
-    let bestScore = getPriority(keys[0], keys[1]);
-    // ... nested loops to find best pair ...
-    return bestPair;
     */
 }
 
