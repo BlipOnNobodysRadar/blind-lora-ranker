@@ -6,83 +6,35 @@
   <title>Apply Elo Tags</title>
   <link rel="stylesheet" href="styles.css">
   <style>
-    #tagging-controls {
-        margin: 20px auto;
-        padding: 20px;
-        border: 1px solid #ccc;
-        border-radius: 5px;
-        max-width: 600px;
-        background-color: #f9f9f9;
-    }
-    #tagging-controls label,
-    #tagging-controls select,
-    #tagging-controls button {
-        margin-right: 15px;
-        margin-bottom: 10px; /* Add spacing below elements */
-        display: inline-block; /* Align elements better */
-    }
-     #tagging-controls fieldset {
-        margin-top: 15px;
-        border: 1px solid #ccc;
-        padding: 10px;
-     }
-     #tagging-controls legend {
-        font-weight: bold;
-     }
-     #tagging-controls .strategy-option {
-        margin-right: 20px; /* Space between radio options */
-     }
-
-    #results-area {
-      margin: 20px auto;
-      padding: 15px;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-      max-width: 600px;
-      background-color: #e9e9e9;
-      min-height: 50px;
-      text-align: left;
-      white-space: pre-wrap; /* Preserve formatting */
-    }
-    .processing {
-      font-style: italic;
-      color: blue;
-    }
-    .error {
-      color: red;
-      font-weight: bold;
-    }
-    .success {
-      color: green;
-    }
-     /* Dark mode specific styles */
-    body.dark-mode #tagging-controls {
-      background-color: #2e2e2e;
-      border-color: #444;
-    }
-     body.dark-mode #tagging-controls fieldset {
-        border-color: #444;
-     }
-    body.dark-mode #results-area {
-      background-color: #333;
-      border-color: #555;
-      color: #ccc;
-    }
+    /* (keep the <style> block as before) */
+    #tagging-controls { margin: 20px auto; padding: 20px; border: 1px solid #ccc; border-radius: 5px; max-width: 700px; background-color: #f9f9f9; }
+    #tagging-controls label, #tagging-controls select, #tagging-controls input, #tagging-controls button { margin-right: 10px; margin-bottom: 10px; vertical-align: middle; }
+    #tagging-controls fieldset { margin-top: 15px; border: 1px solid #ccc; padding: 15px; margin-bottom: 15px;}
+    #tagging-controls legend { font-weight: bold; padding: 0 5px; }
+    #tagging-controls .strategy-option { display: block; margin-bottom: 8px; }
+    #tagging-controls .inline-input { display: inline-block; margin-left: 5px; }
+    #results-area { margin: 20px auto; padding: 15px; border: 1px solid #ccc; border-radius: 5px; max-width: 700px; background-color: #e9e9e9; min-height: 50px; text-align: left; white-space: pre-wrap; font-family: monospace; }
+    .processing { font-style: italic; color: blue; }
+    .error { color: red; font-weight: bold; }
+    .success { color: green; }
+    body.dark-mode #tagging-controls { background-color: #2e2e2e; border-color: #444; }
+    body.dark-mode #tagging-controls fieldset { border-color: #444; }
+    body.dark-mode #results-area { background-color: #333; border-color: #555; color: #ccc; }
     body.dark-mode .processing { color: lightblue; }
-    body.dark-mode .error { color: #ff8a80; } /* Lighter red */
-    body.dark-mode .success { color: #a5d6a7; } /* Lighter green */
+    body.dark-mode .error { color: #ff8a80; }
+    body.dark-mode .success { color: #a5d6a7; }
+    #num-bins-container { display: none; }
   </style>
 </head>
 <body>
-  <!-- BEGIN SHARED NAV BAR -->
-  <nav class="navigation">
+  <!-- (Keep Nav Bar) -->
+   <nav class="navigation">
     <a href="index.html">Rate AI Images</a>
     <a href="index-normal.html">Rate Normal Images</a>
     <a href="rankings.html">AI Image Elo Rankings</a>
     <a href="rankings-normal.html">Normal Image Elo Rankings</a>
     <a href="lora-rankings.html">LoRA Elo Rankings</a>
     <a href="compare-loras.html">Compare LoRAs</a>
-    <!-- Add link to this page -->
     <a href="tagger.html">Apply Elo Tags</a>
 
     <button onclick="refreshDirectories()" style="margin-left:15px;">Refresh Directories</button>
@@ -92,147 +44,64 @@
       Dark Mode
     </label>
   </nav>
-  <!-- END SHARED NAV BAR -->
 
   <h1>Apply Aesthetic Tags Based on Elo</h1>
 
+  <!-- (Keep #tagging-controls div and its contents) -->
   <div id="tagging-controls">
-    <label for="subset-select">Select Normal Subset:</label>
-    <select id="subset-select">
-        <option value="">-- Loading Subsets --</option>
-    </select>
+    <div>
+        <label for="subset-select">Select Normal Subset:</label>
+        <select id="subset-select">
+            <option value="">-- Loading Subsets --</option>
+        </select>
+    </div>
 
     <fieldset>
         <legend>Tagging Strategy</legend>
         <label class="strategy-option">
-            <input type="radio" name="strategy" value="customQuantile" checked>
-            Custom Bins (10/20/40/20/10)
+            <input type="radio" name="strategy" value="customQuantile" checked data-tags="terrible,bad,average,good,excellent" data-prefix="aesthetic_rating_">
+            Custom Bins (10/20/40/20/10 - 5 Tags)
+        </label>
+        <label class="strategy-option">
+            <input type="radio" name="strategy" value="ponyQuantile" data-tags="score_3,score_4,score_5,score_6,score_7,score_8,score_9" data-prefix="quality_">
+            Pony Score Bins (Equal 7 Tags)
         </label>
         <label class="strategy-option">
             <input type="radio" name="strategy" value="equalQuantile">
-            Equal Bins (5)
+            Equal Quantile Bins
         </label>
-        <!-- <label>
-            <input type="radio" name="strategy" value="stdDev" disabled>
-            Standard Deviation (WIP)
-        </label> -->
-         <br>
+        <div id="num-bins-container" class="inline-input">
+             <label for="num-bins">Number of Bins:</label>
+             <input type="number" id="num-bins" value="5" min="2" max="20" style="width: 50px;">
+        </div>
+        <label class="strategy-option">
+            <input type="radio" name="strategy" value="stdDev" data-tags="terrible,bad,average,good,excellent" data-prefix="aesthetic_rating_">
+            Standard Deviation (5 Tags)
+        </label>
+    </fieldset>
+
+     <fieldset>
+        <legend>Tag Configuration</legend>
          <label for="tag-prefix">Tag Prefix:</label>
          <input type="text" id="tag-prefix" value="aesthetic_rating_" size="20">
+         <br>
          <label for="tag-names">Tag Names (comma-separated):</label>
-         <input type="text" id="tag-names" value="terrible,bad,average,good,excellent" size="40">
-
+         <input type="text" id="tag-names" value="terrible,bad,average,good,excellent" size="60">
+         <small> (Required count depends on strategy)</small>
     </fieldset>
 
 
-    <button id="apply-tags-btn">Apply Tags to .txt Files</button>
+    <button id="apply-tags-btn" style="padding: 8px 15px;">Apply Tags to .txt Files</button>
   </div>
 
+  <!-- (Keep #results-area div) -->
   <div id="results-area">
-    Select a subset and click "Apply Tags". Results will appear here.
+    Select a subset and click "Apply Tags". Results will appear here. Ensure you have rated images in the selected subset first.
   </div>
 
+  <!-- Link External JS Files -->
   <script src="darkModeScript.js"></script>
-  <script>
-    const subsetSelect = document.getElementById('subset-select');
-    const applyBtn = document.getElementById('apply-tags-btn');
-    const resultsArea = document.getElementById('results-area');
-    const tagPrefixInput = document.getElementById('tag-prefix');
-    const tagNamesInput = document.getElementById('tag-names');
+  <script src="tagger.js"></script> <!-- Link the new JS file -->
 
-
-    function fetchNormalSubsets() {
-        fetch('/api/normal-subsets')
-            .then(res => res.ok ? res.json() : Promise.reject('Failed to load subsets'))
-            .then(data => {
-                subsetSelect.innerHTML = '<option value="">-- Select Subset --</option>'; // Reset
-                if (data && data.length > 0) {
-                    data.forEach(s => {
-                        const option = document.createElement('option');
-                        option.value = s;
-                        option.textContent = s;
-                        subsetSelect.appendChild(option);
-                    });
-                } else {
-                    subsetSelect.innerHTML = '<option value="">-- No Normal Subsets Found --</option>';
-                }
-            })
-            .catch(error => {
-                console.error('Error fetching normal subsets:', error);
-                subsetSelect.innerHTML = '<option value="">-- Error Loading --</option>';
-                resultsArea.textContent = `Error loading subsets: ${error}`;
-                resultsArea.className = 'error';
-            });
-    }
-
-    function applyTags() {
-        const subset = subsetSelect.value;
-        const selectedStrategy = document.querySelector('input[name="strategy"]:checked').value;
-        const tagPrefix = tagPrefixInput.value.trim();
-        const binTags = tagNamesInput.value.split(',').map(t => t.trim()).filter(t => t); // Get tags from input
-
-        if (!subset) {
-            resultsArea.textContent = 'Please select a subset.';
-            resultsArea.className = 'error';
-            return;
-        }
-         if (!tagPrefix) {
-             resultsArea.textContent = 'Please enter a tag prefix.';
-            resultsArea.className = 'error';
-            return;
-         }
-         if (binTags.length === 0) {
-             resultsArea.textContent = 'Please enter at least one tag name.';
-            resultsArea.className = 'error';
-            return;
-         }
-
-
-        applyBtn.disabled = true;
-        resultsArea.textContent = `Processing subset "${subset}" with strategy "${selectedStrategy}"...`;
-        resultsArea.className = 'processing';
-
-        // Prepare request body (only strategy needed for now,
-        // backend calculates quantiles for 'equalQuantile')
-        const requestBody = {
-            strategy: selectedStrategy,
-            tagPrefix: tagPrefix, // Send prefix
-            binTags: binTags      // Send tag names
-            // Backend uses hardcoded custom quantiles if strategy is 'customQuantile'
-            // or calculates equal ones if strategy is 'equalQuantile'
-        };
-
-
-        fetch(`/api/apply-tags/normal/${subset}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(requestBody)
-        })
-        .then(res => res.json().then(data => ({ ok: res.ok, status: res.status, body: data })))
-        .then(response => {
-            if (response.ok) {
-                resultsArea.textContent = `Success!\n${response.body.message}\nTag Counts: ${JSON.stringify(response.body.tagCounts, null, 2)}`;
-                resultsArea.className = 'success';
-            } else {
-                resultsArea.textContent = `Error (${response.status}): ${response.body.error || 'Unknown error'}`;
-                resultsArea.className = 'error';
-            }
-        })
-        .catch(error => {
-            console.error('Error applying tags:', error);
-            resultsArea.textContent = `Fetch Error: ${error.message}`;
-            resultsArea.className = 'error';
-        })
-        .finally(() => {
-            applyBtn.disabled = false;
-        });
-    }
-
-    document.addEventListener('DOMContentLoaded', () => {
-        fetchNormalSubsets();
-        applyBtn.addEventListener('click', applyTags);
-    });
-
-  </script>
 </body>
 </html>

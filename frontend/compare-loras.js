@@ -113,8 +113,8 @@ function renderTable() {
 
   // For each chosen subset, add rating & matches & diff (if more than one subset)
   chosenSubsets.forEach((subset, i) => {
-    createHeaderCell(headRow, `${getSubsetDisplayName(subset, i)} Rating`, `rating:${subset}`);
     createHeaderCell(headRow, `${getSubsetDisplayName(subset, i)} Matches`, `matches:${subset}`);
+    createHeaderCell(headRow, `${getSubsetDisplayName(subset, i)} Rating`, `rating:${subset}`);
     if (chosenSubsets.length > 1 && baselineSubset && subset !== baselineSubset) {
       createHeaderCell(headRow, `Diff vs ${getBaselineDisplayName()}`, `diff:${subset}`);
     }

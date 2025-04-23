@@ -1,1338 +1,1009 @@
 // backend/server.js
+
+// --- Core Modules ---
 const express = require('express');
 const bodyParser = require('body-parser');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const path = require('path');
+
+// --- Third-party Modules ---
 const pngMetadata = require('png-metadata');
 
+// --- Application Setup ---
 const app = express();
 app.use(bodyParser.json());
 
-// Directories for LoRA-based images (AI_images) and normal images
+// --- Constants & Global Variables ---
 const AI_IMAGES_DIR = path.join(__dirname, '../AI_images');
 const NORMAL_IMAGES_DIR = path.join(__dirname, '../normal_images');
 const FRONTEND_DIR = path.join(__dirname, '../frontend');
 const DATA_DIR = path.join(__dirname, '../data');
 
-// We'll keep two separate in-memory structures
-// "subsets" -> for AI-images (with LoRA metadata)
-// "normalSubsets" -> for normal images (no LoRA metadata)
-let subsets = {};
-let normalSubsets = {};
+let subsets = {}; // In-memory store for AI subsets
+let normalSubsets = {}; // In-memory store for Normal subsets
 
-// Ensure required directories exist
-if (!fs.existsSync(AI_IMAGES_DIR)) {
-  fs.mkdirSync(AI_IMAGES_DIR);
-  console.log('Created AI_images directory. Add subdirectories with PNGs to rate.');
-}
-if (!fs.existsSync(NORMAL_IMAGES_DIR)) {
-  fs.mkdirSync(NORMAL_IMAGES_DIR);
-  console.log('Created normal_images directory. Add subdirectories with images to rate.');
-}
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR);
-  console.log('Created data directory for ratings storage.');
-}
+// --- Initial Setup ---
+ensureDirectoriesExist();
+loadAllSubsets(); // Load AI subsets (incl. offline)
+loadAllNormalSubsets(); // Load Normal subsets
 
-// Load subsets at startup
-loadAllSubsets();        // For AI_images
-loadAllNormalSubsets();  // For normal_images
+// --- Static File Serving ---
+app.use(express.static(FRONTEND_DIR)); // Serve HTML, CSS, JS
+app.use('/images', express.static(AI_IMAGES_DIR)); // Serve AI images (if dir exists)
+app.use('/normal-images', express.static(NORMAL_IMAGES_DIR)); // Serve Normal images
 
-// Serve frontend files
-app.use(express.static(FRONTEND_DIR));
+// ========================================
+// --- API Routes ---
+// ========================================
 
-// Serve AI images at /images so existing front-end references do not break
-app.use('/images', express.static(AI_IMAGES_DIR));
+// --- AI Subset Routes ---
 
-// Serve normal images at /normal-images
-app.use('/normal-images', express.static(NORMAL_IMAGES_DIR));
-
-// --- Fisher-Yates shuffle function ---
-function shuffleArray(array) {
-  for (let i = array.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [array[i], array[j]] = [array[j], array[i]]; // Swap elements
-  }
-}
-
-
-/**
- * Determines the aesthetic tag based on Elo score using custom quantiles.
- * @param {number} score - The Elo score of the image.
- * @param {number[]} sortedScores - Array of all Elo scores in the subset, sorted ascending.
- * @param {string[]} tags - Array of tag names (e.g., ['terrible', 'bad', ...]).
- * @param {number[]} quantiles - Array of cumulative quantile boundaries (e.g., [0.1, 0.3, 0.7, 0.9, 1.0]).
- * @returns {string} The determined tag name.
- */
-function getTagFromQuantiles(score, sortedScores, tags, quantiles) {
-  const totalImages = sortedScores.length;
-  if (totalImages === 0) return tags[Math.floor(tags.length / 2)]; // Default to middle tag if no scores
-
-  // Find the rank (position) of the score in the sorted list
-  // Handle potential duplicate scores by finding the last occurrence's rank
-  let rank = -1;
-  for(let i = sortedScores.length - 1; i >= 0; i--) {
-      if (sortedScores[i] <= score) {
-           // Rank is position + 1, percentile is rank / total
-           // Use index directly for boundary checks for simplicity here
-          rank = i;
-          break;
-      }
-  }
-   // If score is lower than the lowest, rank is effectively -1, handle below
-
-  const percentile = (rank + 1) / totalImages; // Calculate percentile (0 to 1)
-
-  // Determine the bin based on quantile boundaries
-  for (let i = 0; i < quantiles.length; i++) {
-      if (percentile <= quantiles[i]) {
-          return tags[i];
-      }
-  }
-
-  // Should not be reached if quantiles[last] === 1.0, but return last tag as fallback
-  return tags[tags.length - 1];
-}
-
-/**
-* Applies aesthetic tags to TXT files based on Elo ratings for a normal subset.
-*/
-app.post('/api/apply-tags/normal/:subset', async (req, res) => {
-  const subset = req.params.subset;
-  const {
-      // Allow passing config in the future, default to user's request for now
-      tagPrefix = 'aesthetic_rating_',
-      strategy = 'customQuantile', // Example strategies: 'customQuantile', 'equalQuantile', 'stdDev'
-      // Define user's custom quantile setup
-      binTags = ['terrible', 'bad', 'average', 'good', 'excellent'],
-      binQuantiles = [0.1, 0.3, 0.7, 0.9, 1.0] // Cumulative: 10%, next 20% (->30%), next 40% (->70%), next 20% (->90%), top 10% (->100%)
-  } = req.body; // Get config from request body
-
-  console.log(`Received request to apply tags for normal subset: ${subset} using strategy: ${strategy}`);
-
-  if (!normalSubsets[subset]) {
-      return res.status(404).json({ error: 'Normal subset not found' });
-  }
-
-  const { images } = normalSubsets[subset];
-  const ratedImages = Object.entries(images)
-                            .filter(([_, data]) => data.rating !== null)
-                            .map(([name, data]) => ({ name, rating: data.rating }));
-
-  if (ratedImages.length < binTags.length) { // Need at least as many images as bins for quantiles
-      return res.status(400).json({ error: `Not enough rated images (${ratedImages.length}) in subset to apply ${binTags.length} tags.` });
-  }
-
-  // --- Apply Binning Strategy ---
-  let imageTags = {}; // { imageName: 'tag_name', ... }
-
-  if (strategy === 'customQuantile' || strategy === 'equalQuantile') { // Handle both quantile types
-      ratedImages.sort((a, b) => a.rating - b.rating); // Sort by Elo ascending
-      const sortedScores = ratedImages.map(img => img.rating);
-      let currentQuantiles = binQuantiles; // Default to custom
-
-      if(strategy === 'equalQuantile') {
-          // Calculate equal quantile boundaries
-          const numBins = binTags.length;
-          currentQuantiles = [];
-          for (let i = 1; i <= numBins; i++) {
-               currentQuantiles.push(i / numBins);
-          }
-          console.log(`Using equal quantiles: ${currentQuantiles}`);
-      } else {
-           console.log(`Using custom quantiles: ${currentQuantiles}`);
-      }
-
-
-      ratedImages.forEach(img => {
-          imageTags[img.name] = getTagFromQuantiles(img.rating, sortedScores, binTags, currentQuantiles);
-      });
-
-  } else if (strategy === 'stdDev') {
-      // TODO: Implement Standard Deviation binning if needed
-      return res.status(501).json({ error: 'Standard Deviation tagging not implemented yet.' });
-  } else {
-      return res.status(400).json({ error: `Unknown tagging strategy: ${strategy}` });
-  }
-
-  // --- Process Files ---
-  let processedCount = 0;
-  let errorCount = 0;
-  const tagCounts = binTags.reduce((acc, tag) => ({ ...acc, [tag]: 0 }), {}); // Initialize counts
-
-  const subsetPath = path.join(NORMAL_IMAGES_DIR, subset);
-
-  // Process files sequentially to avoid overwhelming the system
-  for (const img of ratedImages) {
-      const imageName = img.name;
-      const assignedTag = imageTags[imageName]; // e.g., 'average'
-      const fullTag = tagPrefix + assignedTag; // e.g., 'aesthetic_rating_average'
-
-      if (!assignedTag) {
-          console.warn(`No tag assigned for image ${imageName}, skipping.`);
-          continue;
-      }
-
-      tagCounts[assignedTag]++; // Count the assigned tag type
-
-      const baseName = path.parse(imageName).name;
-      const txtFilePath = path.join(subsetPath, `${baseName}.txt`);
-
-      try {
-          let currentContent = '';
-          try {
-              currentContent = await fsPromises.readFile(txtFilePath, 'utf8');
-          } catch (readError) {
-              if (readError.code === 'ENOENT') {
-                  console.log(`Creating new caption file: ${txtFilePath}`);
-                  currentContent = ''; // File doesn't exist, start fresh
-              } else {
-                  throw readError; // Rethrow other read errors
-              }
-          }
-
-          // Split into tags, trim whitespace, filter out old tags and empty strings
-          let tags = currentContent.split(',')
-                                .map(t => t.trim())
-                                .filter(t => t && !t.startsWith(tagPrefix));
-
-          // Add the new tag
-          tags.push(fullTag);
-
-          // Join back together
-          const newContent = tags.join(', ');
-
-          // Write the updated content back
-          await fsPromises.writeFile(txtFilePath, newContent, 'utf8');
-          processedCount++;
-
-      } catch (err) {
-          console.error(`Error processing file for ${imageName} (${txtFilePath}):`, err);
-          errorCount++;
-      }
-  }
-
-  // --- Send Response ---
-  const message = `Tagging complete for subset "${subset}". Processed: ${processedCount}, Errors: ${errorCount}.`;
-  console.log(message, "Tag counts:", tagCounts);
-  res.json({
-      message: message,
-      processed: processedCount,
-      errors: errorCount,
-      tagCounts: tagCounts
-  });
-});
-
-
-/**
- * Loads all AI subsets by checking both the AI_images directory AND existing data files.
- */
-function loadAllSubsets() {
-  const discoveredSubsets = new Set();
-
-  // 1. Discover from AI_images directory
-  if (fs.existsSync(AI_IMAGES_DIR)) {
-      try {
-          fs.readdirSync(AI_IMAGES_DIR)
-            .filter(dir => {
-                const dirPath = path.join(AI_IMAGES_DIR, dir);
-                // Ensure it's actually a directory
-                try {
-                    return fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory();
-                } catch (statErr) {
-                    console.warn(`Error stating directory ${dirPath}: ${statErr.message}. Skipping.`);
-                    return false;
-                }
-            })
-            .forEach(subset => discoveredSubsets.add(subset));
-            console.log(`Discovered subsets from AI_images directory: ${[...discoveredSubsets].join(', ')}`);
-      } catch (err) {
-          console.error(`Error reading AI_images directory: ${err.message}`);
-      }
-  } else {
-      console.log('AI_images directory not found. Trying to load from data files only.');
-      // Optional: Create AI_images directory if it doesn't exist
-      // fs.mkdirSync(AI_IMAGES_DIR);
-  }
-
-  // 2. Discover from data directory
-  if (fs.existsSync(DATA_DIR)) {
-       try {
-          fs.readdirSync(DATA_DIR)
-            // Match ratings-<subset>.json but NOT ratings-normal-<subset>.json
-            .filter(file => /^ratings-(?!normal-).+\.json$/.test(file))
-            .forEach(file => {
-                const match = file.match(/^ratings-(.+)\.json$/);
-                if (match && match[1]) {
-                    if (!discoveredSubsets.has(match[1])) {
-                       console.log(`Discovered subset "${match[1]}" from data file: ${file}`);
-                    }
-                    discoveredSubsets.add(match[1]);
-                }
-            });
-      } catch(err) {
-           console.error(`Error reading data directory: ${err.message}`);
-      }
-  } else {
-      console.log('Data directory not found. Cannot discover subsets from data files.');
-       // Optional: Create data directory if it doesn't exist
-       // fs.mkdirSync(DATA_DIR);
-  }
-
-
-  const allSubsetNames = Array.from(discoveredSubsets);
-
-  if (allSubsetNames.length === 0) {
-      console.log('\nNo AI image subsets found either in "AI_images" directory or as "data/ratings-*.json" files.');
-      console.log('To get started:');
-      console.log('1. Create subdirectories in the "AI_images" folder.');
-      console.log('2. Add PNG images with LoRA metadata into those subdirectories.');
-      console.log('3. Run the rating process to generate data files.');
-      console.log('OR, if you only have data files, ensure they are in the "data" directory.');
-      return;
-  }
-
-  console.log(`Attempting to load data for subsets: ${allSubsetNames.join(', ')}`);
-  allSubsetNames.forEach(subset => {
-      loadSubset(subset); // Call the modified loadSubset
-  });
-}
-
-/**
-* Loads a single LoRA-based subset, prioritizing data file and optionally reading image files if directory exists.
-*/
-function loadSubset(subset) {
-  console.log(`Loading AI subset "${subset}"...`);
-  const subsetPath = path.join(AI_IMAGES_DIR, subset);
-  const ratingFile = path.join(DATA_DIR, `ratings-${subset}.json`);
-
-  let savedData = { ratings: {}, matchCount: {}, loraModelRatings: {} };
-  let directoryExists = false;
-  let files = [];
-
-  // 1. Load saved ratings data FIRST (this is the source of truth for "offline" mode)
-  if (fs.existsSync(ratingFile)) {
-      try {
-          savedData = JSON.parse(fs.readFileSync(ratingFile, 'utf8'));
-          console.log(`Successfully loaded data file ${ratingFile} for subset "${subset}".`);
-      } catch (e) {
-          console.error(`Error parsing rating file ${ratingFile} for subset "${subset}":`, e.message, "- Resetting saved data.");
-          // Reset saved data if parsing fails, but continue loading if possible
-          savedData = { ratings: {}, matchCount: {}, loraModelRatings: {} };
-      }
-  } else {
-       console.log(`No data file found for subset "${subset}" at ${ratingFile}. Will initialize from images if directory exists.`);
-  }
-
-  // 2. Check if image directory exists and read files IF it does
-  try {
-      if (fs.existsSync(subsetPath) && fs.statSync(subsetPath).isDirectory()) {
-          directoryExists = true;
-          files = fs.readdirSync(subsetPath).filter(file => file.toLowerCase().endsWith('.png'));
-          console.log(`Image directory found for subset "${subset}". Found ${files.length} PNG files.`);
-      } else {
-           console.log(`Image directory NOT found for subset "${subset}" at ${subsetPath}. Loading in "offline" mode from data only.`);
-      }
-  } catch (dirErr) {
-      console.warn(`Error accessing image directory for subset "${subset}" at ${subsetPath}: ${dirErr.message}. Loading in "offline" mode.`);
-      directoryExists = false;
-  }
-
-
-  let images = {}; // Store image-specific data (rating, matches, associated LoRA)
-  let loraModels = {}; // Store aggregated LoRA data (rating, matches)
-
-  // 3. Initialize LoRA models from saved data FIRST
-  if (savedData.loraModelRatings) {
-      for (const loraName in savedData.loraModelRatings) {
-          if (!loraModels[loraName]) { // Avoid overwriting if somehow already initialized
-               loraModels[loraName] = {
-                  rating: savedData.loraModelRatings[loraName]?.rating ?? 1000, // Default if property missing
-                  matches: savedData.loraModelRatings[loraName]?.count ?? 0     // Default if property missing
-              };
-          }
-      }
-      console.log(`Initialized ${Object.keys(loraModels).length} LoRA models from saved data for subset "${subset}".`);
-  }
-
-  // 4. Process image files ONLY if the directory exists
-  if (directoryExists) {
-      for (const file of files) {
-          const imagePath = path.join(subsetPath, file);
-          const loraModelFromFile = getPngMetadata(imagePath); // Can return '', 'NONE', or 'LoraName:Strength'
-
-          // Determine if image existed in saved data
-          const ratingExistsInSaved = savedData.ratings && savedData.ratings.hasOwnProperty(file);
-          const savedRating = ratingExistsInSaved ? savedData.ratings[file] : null;
-          const savedMatches = ratingExistsInSaved ? (savedData.matchCount[file] ?? 0) : null; // Use saved matches if rating exists
-
-          // Skip PNGs with no metadata *if* they weren't already rated/saved
-          // Allow 'NONE' only if previously rated
-          if (!loraModelFromFile && !ratingExistsInSaved) {
-              // console.log(`Skipping new image "${file}" with no metadata.`);
-              continue;
-          }
-
-          // Initialize image data: Use saved rating/matches if available, otherwise null (requires seeding)
-          images[file] = {
-              rating: savedRating,
-              matches: savedMatches,
-              lora: loraModelFromFile || (ratingExistsInSaved ? (savedData.images?.[file]?.lora ?? '') : '') // Use LoRA from file if possible, fallback to saved LoRA if file has none/error but was saved
-          };
-
-           // Update/Initialize LoRA model data based on the file's metadata
-           // Only add/update if a valid LoRA name was extracted from the file
-          if (loraModelFromFile && loraModelFromFile !== 'NONE' && loraModelFromFile !== '') {
-              if (!loraModels[loraModelFromFile]) {
-                   // If this LoRA wasn't in the saved JSON, initialize it now
-                  loraModels[loraModelFromFile] = {
-                      rating: 1000, // New LoRA discovered from PNG
-                      matches: 0
-                  };
-                   console.log(`Discovered new LoRA "${loraModelFromFile}" from image "${file}".`);
-              }
-               // We don't update rating/matches here; that happens during voting or loading from JSON.
-               // We just ensure the LoRA model entry exists.
-          }
-      }
-  }
-
-  // 5. Populate image data for images ONLY present in saved data (directory/file missing)
-  // This isn't strictly necessary for LoRA comparison but maintains consistency if needed elsewhere
-  if (savedData.ratings) {
-      for (const savedFile in savedData.ratings) {
-          if (!images[savedFile]) { // If not already processed from an existing file
-               console.log(`Adding image "${savedFile}" from saved data (file missing).`);
-               images[savedFile] = {
-                  rating: savedData.ratings[savedFile],
-                  matches: savedData.matchCount[savedFile] ?? 0,
-                  lora: savedData.images?.[savedFile]?.lora ?? '' // Try to get LoRA from old format if exists
-               };
-          }
-      }
-  }
-
-
-  // Final assignment to the global structure
-  subsets[subset] = { images, loraModels };
-  console.log(`Finished loading AI subset "${subset}". Images tracked: ${Object.keys(images).length}, LoRAs tracked: ${Object.keys(loraModels).length}. Mode: ${directoryExists ? 'Online' : 'Offline'}`);
-}
-
-
-/**
- * Loads all subsets from the NORMAL_IMAGES_DIR (i.e. normal images with no LoRA metadata).
- */
-function loadAllNormalSubsets() {
-  if (!fs.existsSync(NORMAL_IMAGES_DIR)) {
-    console.log('normal_images directory not found. Creating empty directory.');
-    fs.mkdirSync(NORMAL_IMAGES_DIR);
-    return;
-  }
-
-  const allSubsets = fs.readdirSync(NORMAL_IMAGES_DIR)
-    .filter(dir => {
-      const dirPath = path.join(NORMAL_IMAGES_DIR, dir);
-      return fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory();
-    });
-
-  if (allSubsets.length === 0) {
-    console.log('\nNo normal image subdirectories found. Instructions:\n');
-    console.log('1. Create subdirectories in the "normal_images" folder.');
-    console.log('2. Add .png/.jpg/.jpeg (or other common format) images into those subdirectories.');
-    console.log('Example:');
-    console.log('normal_images/');
-    console.log('  ├── subset1/');
-    console.log('  │   ├── imageA.jpg');
-    console.log('  │   └── imageB.png');
-    console.log('  └── subset2/');
-    console.log('      ├── imageC.jpeg');
-    console.log('      └── imageD.png\n');
-    console.log('After adding images, restart the server and reload the appropriate page.');
-    return;
-  }
-
-  allSubsets.forEach(subset => {
-    loadNormalSubset(subset);
-  });
-}
-
-/**
- * Loads a single subset of normal images (from NORMAL_IMAGES_DIR).
- * - Accepts common file types
- * - No metadata extraction
- * - Builds normalSubsets data
- * - Initializes ratings to null if not found in saved data
- */
-function loadNormalSubset(subset) {
-  const subsetPath = path.join(NORMAL_IMAGES_DIR, subset);
-  // Accept any common image extension; add more if you like
-  const validExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.gif',];
-  const files = fs.readdirSync(subsetPath)
-    .filter(file => validExtensions.includes(path.extname(file).toLowerCase()));
-
-  // Load previous ratings data if it exists
-  let savedData = { ratings: {}, matchCount: {} };
-  const ratingFile = path.join(DATA_DIR, `ratings-normal-${subset}.json`);
-  if (fs.existsSync(ratingFile)) {
-    try {
-      savedData = JSON.parse(fs.readFileSync(ratingFile, 'utf8'));
-    } catch (e) {
-      console.error(`Error parsing rating file ${ratingFile}:`, e);
-      // Reset saved data if parsing fails
-      savedData = { ratings: {}, matchCount: {} };
-    }
-  }
-
-  let images = {};
-
-  for (const file of files) {
-    // Check if rating exists in savedData.ratings
-    const isInitialized = savedData.ratings.hasOwnProperty(file);
-
-    images[file] = {
-      // If not in saved data, rating is null (needs seeding)
-      rating: isInitialized ? savedData.ratings[file] : null,
-      // If not in saved data, matches is null (needs seeding)
-      matches: isInitialized ? savedData.matchCount[file] ?? 0 : null, // Default matches to 0 if rating exists but matches doesn't
-      lora: '' // not applicable, but keep same structure
-    };
-  }
-
-  normalSubsets[subset] = { images };
-  console.log(`Loaded Normal subset "${subset}". Images: ${Object.keys(images).length}`);
-}
-
-/**
- * Extracts LoRA model name from a PNG using known text chunks.
- * Returns '' if no LoRA is found.
- */
-function getPngMetadata(imagePath) {
-  try {
-    const buffer = pngMetadata.readFileSync(imagePath);
-    const chunks = pngMetadata.splitChunk(buffer);
-
-    // Extract all tEXt chunks
-    const textChunks = chunks
-      .filter(c => c.type === 'tEXt')
-      .map(c => parseTextChunk(c.data));
-
-    // 1. Auto1111 format
-    const parametersChunk = textChunks.find(c => c.keyword === 'parameters');
-    if (parametersChunk) {
-      // Updated regex to capture both name and strength
-      const loraMatch = parametersChunk.text.match(/<lora:([^:]+):([^>]+)>/);
-      if (loraMatch && loraMatch[1]) {
-        const loraName = loraMatch[1].trim();
-        const loraStrength = loraMatch[2] || ""; // Get the strength value
-        return loraName + (loraStrength ? `:${loraStrength}` : ""); // Return name:strength format
-      }
-      // If parameters chunk exists but no LoRA was found, explicitly return "NONE"
-      return "NONE";
-    }
-
-    // 2. ComfyUI format in 'prompt'
-    const promptChunk = textChunks.find(c => c.keyword === 'prompt');
-    if (promptChunk) {
-      try {
-        const jsonData = JSON.parse(promptChunk.text);
-        const loraName = extractLoraFromComfyUI(jsonData);
-        if (loraName) return loraName;
-        return "NONE";
-      } catch {}
-    }
-
-    // 3. ComfyUI format in 'workflow'
-    const workflowChunk = textChunks.find(c => c.keyword === 'workflow');
-    if (workflowChunk) {
-      try {
-        const jsonData = JSON.parse(workflowChunk.text);
-        const loraName = extractLoraFromWorkflow(jsonData);
-        if (loraName) return loraName;
-        return "NONE";
-      } catch {}
-    }
-
-    // Fallback if no standard metadata chunk found
-    return '';
-  } catch (err) {
-    console.error(`Error parsing PNG metadata for ${imagePath}:`, err.message);
-    return ''; // Return empty string on error or if no metadata found
-  }
-}
-
-function parseTextChunk(dataBuffer) {
-  const rawStr = dataBuffer.toString('utf8');
-  const nullIndex = rawStr.indexOf('\0');
-  if (nullIndex === -1) {
-    return { keyword: '', text: rawStr }; // Handle cases without null separator
-  }
-  const keyword = rawStr.slice(0, nullIndex);
-  const text = rawStr.slice(nullIndex + 1);
-  return { keyword, text };
-}
-
-function extractLoraFromComfyUI(jsonData) {
-  // Check if jsonData is an object and has properties
-  if (typeof jsonData !== 'object' || jsonData === null || Object.keys(jsonData).length === 0) {
-    return '';
-  }
-  for (const key in jsonData) {
-    const node = jsonData[key];
-    // Check if node is valid and has class_type
-    if (node && typeof node === 'object' && node.class_type === 'LoraLoader') {
-      const name = extractNameFromLoraNode(node);
-      if (name) return name;
-    }
-  }
-  return '';
-}
-
-function extractLoraFromWorkflow(jsonData) {
-   // Check if jsonData is an object and has a nodes array
-   if (typeof jsonData !== 'object' || jsonData === null || !Array.isArray(jsonData.nodes)) {
-    return '';
-  }
-  if (jsonData && Array.isArray(jsonData.nodes)) {
-    for (const node of jsonData.nodes) {
-      // Check if node is valid and has class_type
-      if (node && typeof node === 'object' && node.class_type === 'LoraLoader') {
-        const name = extractNameFromLoraNode(node);
-        if (name) return name;
-      }
-    }
-  }
-  return '';
-}
-
-function extractNameFromLoraNode(node) {
-  // Check for inputs property
-  if (node.inputs && typeof node.inputs === 'object' && node.inputs.lora_name) {
-    // Check if lora_name is a string
-    if (typeof node.inputs.lora_name === 'string') {
-       return extractLoraNameFromPath(node.inputs.lora_name);
-    } else if (Array.isArray(node.inputs.lora_name) && typeof node.inputs.lora_name[0] === 'string') {
-       // Handle cases like ["lora_name", 0]
-       return extractLoraNameFromPath(node.inputs.lora_name[0]);
-    }
-  }
-  // Check for widgets_values property
-  if (Array.isArray(node.widgets_values) && node.widgets_values.length > 0) {
-    const val = node.widgets_values[0];
-    if (typeof val === 'string') {
-      return extractLoraNameFromPath(val);
-    }
-  }
-  return '';
-}
-
-function extractLoraNameFromPath(loraPath) {
-  if (typeof loraPath !== 'string') return '';
-  let name = loraPath.split('/').pop();
-  name = name.replace(/\.(safetensors|ckpt|pt|bin)$/i, '');
-  return name.trim();
-}
-
-
-/**
- * Converts a star rating (1-10) to an initial Elo rating (700-1600).
- * @param {number} starRating - The star rating (1 to 10).
- * @returns {number} - The corresponding Elo rating.
- */
-function starToElo(starRating) {
-  // Ensure rating is within the valid range
-  starRating = Math.max(1, Math.min(10, starRating));
-  // Formula: 1000 as average rating at 5 stars. 1 star 600 rating, 10 star 1500.
-  return 1000 + (starRating - 5) * 100;
-}
-
-
-/**
- * Updates Elo ratings for two entities.
- * Accounts for potential null ratings during initial seeding phase, though this function
- * is primarily used for head-to-head AFTER seeding.
- */
-function updateRatings(winner, loser) {
-  // Ensure entities have valid ratings before calculating Elo
-  const winnerRating = winner.rating === null ? 1000 : winner.rating; // Use 1000 for calculation if not yet seeded
-  const loserRating = loser.rating === null ? 1000 : loser.rating; // Use 1000 for calculation if not yet seeded
-
-  const getKFactor = (matches) => {
-    // If matches is null (unseeded), use a high K-factor
-    if (matches === null || matches < 10) return 64;
-    if (matches < 20) return 48;
-    if (matches < 30) return 32;
-    return 24;
-  };
-
-  const kWinner = getKFactor(winner.matches);
-  const kLoser = getKFactor(loser.matches);
-
-  const expectedWinner = 1 / (1 + Math.pow(10, (loserRating - winnerRating) / 400));
-
-  // Update ratings ONLY if they were already initialized (not null) OR set them to 1000 if they were null
-  // This function should ideally only be called for images already initialized (rating !== null)
-  // The seeding process happens separately.
-  // Reverting to the original check here, as updateRatings is for POST /vote
-  winner.rating = (winner.rating || 1000) + kWinner * (1 - expectedWinner);
-  loser.rating = (loser.rating || 1000) + kLoser * (0 - expectedWinner);
-
-  // Matches should never be null if this function is called, but handle defensively
-  winner.matches = (winner.matches || 0) + 1;
-  loser.matches = (loser.matches || 0) + 1;
-}
-
-
-/**
- * Selects an optimal pair among a set of images.
- * This function should only be called when all images are initialized (rating !== null).
- */
-function selectPair(images) {
-  const keys = Object.keys(images).filter(img => images[img].rating !== null); // Only consider initialized images
-  if (keys.length < 2) return [];
-
-  const getPriority = (img1, img2) => {
-    const img1Matches = images[img1].matches || 0;
-    const img2Matches = images[img2].matches || 0;
-    const ratingDiff = Math.abs((images[img1].rating || 1000) - (images[img2].rating || 1000)); // Use 1000 if somehow still null
-    const matchScore = 1 / Math.min(img1Matches + 1, img2Matches + 1);
-    let score = matchScore * (1000 - ratingDiff);
-
-    // If both images happen to have the same lora (for AI images), reduce their pairing priority
-    if (images[img1].lora && images[img1].lora === images[img2].lora) {
-      score *= 0.9;
-    }
-    return score;
-  };
-
-  let bestPair = [keys[0], keys[1]];
-  let bestScore = getPriority(keys[0], keys[1]);
-
-  for (let i = 0; i < keys.length - 1; i++) {
-    for (let j = i + 1; j < keys.length; j++) {
-      const score = getPriority(keys[i], keys[j]);
-      if (score > bestScore) {
-        bestScore = score;
-        bestPair = [keys[i], keys[j]];
-      }
-    }
-  }
-
-  return bestPair;
-}
-
-/**
- * Saves the updated ratings for an AI (LoRA) subset.
- */
-function saveSubsetRatings(subset) {
-  const subsetData = subsets[subset];
-  if (!subsetData) return; // Ensure subset exists
-
-  const { images, loraModels } = subsetData;
-  const ratings = {};
-  const matchCount = {};
-  const loraModelRatings = {};
-
-  for (const img in images) {
-    // Only save ratings/matchCount if the image has been initialized (rating is not null)
-    if (images[img].rating !== null) {
-      ratings[img] = images[img].rating;
-      matchCount[img] = images[img].matches;
-    }
-  }
-
-  for (const lm in loraModels) {
-    loraModelRatings[lm] = {
-      rating: loraModels[lm].rating,
-      count: loraModels[lm].matches
-    };
-  }
-
-  const ratingFile = path.join(DATA_DIR, `ratings-${subset}.json`);
-  fs.writeFileSync(ratingFile, JSON.stringify({
-    ratings,
-    matchCount,
-    loraModelRatings
-  }, null, 2));
-}
-
-/**
- * Saves the updated ratings for a normal subset.
- */
-function saveNormalSubsetRatings(subset) {
-  const subsetData = normalSubsets[subset];
-  if (!subsetData) return; // Ensure subset exists
-
-  const { images } = subsetData;
-  const ratings = {};
-  const matchCount = {};
-
-  for (const img in images) {
-     // Only save ratings/matchCount if the image has been initialized (rating is not null)
-    if (images[img].rating !== null) {
-      ratings[img] = images[img].rating;
-      matchCount[img] = images[img].matches;
-    }
-  }
-
-  const ratingFile = path.join(DATA_DIR, `ratings-normal-${subset}.json`);
-  fs.writeFileSync(ratingFile, JSON.stringify({
-    ratings,
-    matchCount
-  }, null, 2));
-}
-
-/**
- * Checks if a subset requires initial seeding.
- * Returns an object indicating status and a list of uninitialized images.
- */
-function checkForUninitialized(subsetType, subsetName) {
-    const subsetCollection = subsetType === 'ai' ? subsets : normalSubsets;
-    const subsetData = subsetCollection[subsetName];
-
-    if (!subsetData) {
-        // Subset not found, handle as an error
-        return { error: `${subsetType === 'ai' ? 'AI' : 'Normal'} subset not found` };
-    }
-
-    const uninitializedImages = Object.keys(subsetData.images)
-        .filter(imageName => subsetData.images[imageName].rating === null);
-
-    return {
-        requiresSeeding: uninitializedImages.length > 0,
-        uninitializedImages: uninitializedImages
-    };
-}
-
-
-// ------------- AI (LoRA) routes -------------
-
-/** List AI subsets */
-// GET /api/subsets - List available AI subsets (now includes offline ones)
+// GET /api/subsets - List available AI subsets (incl. offline)
 app.get('/api/subsets', (req, res) => {
-  // Sort subset names alphabetically for consistent UI
-  const sortedSubsetNames = Object.keys(subsets).sort((a, b) => a.localeCompare(b));
-  res.json(sortedSubsetNames);
+    const sortedSubsetNames = Object.keys(subsets).sort((a, b) => a.localeCompare(b));
+    res.json(sortedSubsetNames);
 });
 
-/** Get a match pair or signal seeding needed from an AI subset */
+// GET /api/match/:subset - Get match pair or seeding info for AI subset
 app.get('/api/match/:subset', (req, res) => {
-  const subset = req.params.subset;
-  const subsetData = subsets[subset];
+    const subset = req.params.subset;
+    const subsetData = subsets[subset];
+    if (!subsetData) return res.status(404).json({ error: 'AI subset not found' });
 
-  if (!subsetData) {
-    return res.status(404).json({ error: 'AI subset not found' });
-  }
+    const check = checkForUninitialized('ai', subset);
+    if (check.error) return res.status(404).json({ error: check.error });
 
-  const check = checkForUninitialized('ai', subset);
+    if (check.requiresSeeding) {
+        if (check.uninitializedImages.length === 0) {
+            return res.status(400).json({ error: 'Seeding required but no uninitialized images found.' });
+        }
+        shuffleArray(check.uninitializedImages); // Shuffle for seeding view
+        return res.json({ requiresSeeding: true, uninitializedImages: check.uninitializedImages });
+    }
 
-  if (check.error) {
-       return res.status(404).json({ error: check.error });
-  }
-
-  if (check.requiresSeeding) {
-      if (check.uninitializedImages.length === 0) {
-           // Should not happen if requiresSeeding is true, but defensive check
-           return res.status(400).json({ error: 'No uninitialized images found, but seeding required flag is true.' });
-      }
-      return res.json({ requiresSeeding: true, uninitializedImages: check.uninitializedImages });
-  }
-
-  // No seeding needed, proceed with matchmaking
-  const pair = selectPair(subsetData.images);
-  if (pair.length < 2) {
-    return res.status(400).json({ error: 'Not enough initialized images to form a pair. Seed images first or add more images.' });
-  }
-
-  res.json({ image1: pair[0], image2: pair[1] });
+    const pair = selectPair(subsetData.images);
+    if (pair.length < 2) {
+        return res.status(400).json({ error: 'Not enough initialized images to form a pair.' });
+    }
+    res.json({ image1: pair[0], image2: pair[1] });
 });
 
-/** Record a vote for an AI subset */
+// POST /api/vote/:subset - Record a vote for an AI subset match
 app.post('/api/vote/:subset', (req, res) => {
-  const subset = req.params.subset;
-  const { winner, loser } = req.body; // Note: Result type ('draw' etc.) is in frontend script.js but not used in backend updateRatings - can be added if needed later for score adjustments.
+    const subset = req.params.subset;
+    const { winner, loser } = req.body;
 
-  if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
-  const { images, loraModels } = subsets[subset];
+    if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
+    const { images, loraModels } = subsets[subset];
 
-   // Check if images are actually initialized before voting
-  if (images[winner]?.rating === null || images[loser]?.rating === null) {
-       return res.status(400).json({ error: 'Cannot vote on unseeded images. Please seed first.' });
-  }
+    if (!images[winner] || !images[loser]) {
+        return res.status(400).json({ error: 'Invalid winner/loser image provided.' });
+    }
+    if (images[winner]?.rating === null || images[loser]?.rating === null) {
+        return res.status(400).json({ error: 'Cannot vote on unseeded images.' });
+    }
 
-  if (!images[winner] || !images[loser]) {
-    return res.status(400).json({ error: 'Invalid winner/loser image provided.' });
-  }
+    // Update image ratings
+    updateRatings(images[winner], images[loser]);
 
-  // Update image ratings
-  updateRatings(images[winner], images[loser]);
+    // Update LoRA model ratings if applicable
+    const winnerLora = images[winner].lora;
+    const loserLora = images[loser].lora;
+    if (winnerLora && loserLora && winnerLora !== loserLora && loraModels[winnerLora] && loraModels[loserLora]) {
+        updateRatings(loraModels[winnerLora], loraModels[loserLora]);
+    } // Add warnings for missing LoRAs if desired
 
-  const winnerLora = images[winner].lora;
-  const loserLora = images[loser].lora;
-
-  // Update LoRA model ratings if they differ AND both LoRAs are tracked
-  // Ensure loraModels[winnerLora] and loraModels[loserLora] exist
-  if (winnerLora && loserLora && winnerLora !== loserLora && loraModels[winnerLora] && loraModels[loserLora]) {
-    updateRatings(loraModels[winnerLora], loraModels[loserLora]);
-  } else if (winnerLora && !loraModels[winnerLora]) {
-     console.warn(`LoRA model ${winnerLora} not found for image ${winner}. Skipping LoRA rating update.`);
-  } else if (loserLora && !loraModels[loserLora]) {
-     console.warn(`LoRA model ${loserLora} not found for image ${loser}. Skipping LoRA rating update.`);
-  }
-
-
-  saveSubsetRatings(subset);
-  res.json({ message: 'Vote recorded successfully.' });
+    saveSubsetRatings(subset);
+    res.json({ message: 'Vote recorded successfully.' });
 });
 
-/** Seed ratings for an AI subset */
+// POST /api/seed-ratings/ai/:subset - Seed initial ratings for AI subset images
 app.post('/api/seed-ratings/ai/:subset', (req, res) => {
     const subset = req.params.subset;
     const { ratings } = req.body; // { imageName: starRating, ... }
 
-    if (!subsets[subset]) {
-        return res.status(404).json({ error: 'AI subset not found' });
-    }
-
+    if (!subsets[subset]) return res.status(404).json({ error: 'AI subset not found' });
     const subsetImages = subsets[subset].images;
     let imagesSeededCount = 0;
 
     for (const imageName in ratings) {
         const starRating = ratings[imageName];
-
-        // Validate image exists and is currently uninitialized
         if (subsetImages[imageName] && subsetImages[imageName].rating === null) {
             if (typeof starRating === 'number' && starRating >= 1 && starRating <= 10) {
                 subsetImages[imageName].rating = starToElo(starRating);
-                subsetImages[imageName].matches = 0; // Seeded images start with 0 matches
+                subsetImages[imageName].matches = 0;
                 imagesSeededCount++;
-            } else {
-                 console.warn(`Invalid star rating ${starRating} for image ${imageName} in subset ${subset}. Skipping.`);
-            }
-        } else if (subsetImages[imageName] && subsetImages[imageName].rating !== null) {
-             console.warn(`Image ${imageName} in subset ${subset} is already seeded. Skipping.`);
-        } else {
-             console.warn(`Image ${imageName} not found in subset ${subset}. Skipping.`);
-        }
+            } // Add warnings for invalid ratings if desired
+        } // Add warnings for already seeded or non-existent images if desired
     }
 
     if (imagesSeededCount > 0) {
         saveSubsetRatings(subset);
-        res.json({ message: `Seeded ${imagesSeededCount} images in subset "${subset}".` });
+        res.json({ message: `Seeded ${imagesSeededCount} images in AI subset "${subset}".` });
     } else {
-        res.status(400).json({ message: 'No valid uninitialized images with ratings provided.' });
+        res.status(400).json({ message: 'No valid uninitialized AI images with ratings provided.' });
     }
 });
 
-
-/** Get image-level Elo ranking for an AI subset */
+// GET /api/elo-rankings/:subset - Get ranked list of AI images
 app.get('/api/elo-rankings/:subset', (req, res) => {
-  const subset = req.params.subset;
-  if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
+    const subset = req.params.subset;
+    if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
 
-  const { images } = subsets[subset];
-  const ranked = Object.keys(images)
-    .filter(img => images[img].rating !== null) // Only include initialized images in rankings
-    .sort((a, b) => images[b].rating - images[a].rating)
-    .map(img => ({
-      image: img,
-      rating: images[img].rating,
-      matches: images[img].matches,
-      lora: images[img].lora
-    }));
-
-  res.json(ranked);
+    const { images } = subsets[subset];
+    const ranked = Object.keys(images)
+        .filter(img => images[img].rating !== null)
+        .map(img => ({
+            image: img,
+            rating: images[img].rating,
+            matches: images[img].matches,
+            lora: images[img].lora
+        }))
+        .sort((a, b) => b.rating - a.rating);
+    res.json(ranked);
 });
 
-// GET /api/lora-rankings/:subset - Get LoRA rankings for a subset
+// GET /api/lora-rankings/:subset - Get ranked list of LoRAs within an AI subset
 app.get('/api/lora-rankings/:subset', (req, res) => {
-  const subset = req.params.subset;
-  if (!subsets[subset]) {
-    // Check if it exists in normalSubsets as a fallback? No, stick to AI subsets.
-    console.warn(`Request for LoRA rankings for unknown or unloaded AI subset: ${subset}`);
-    return res.status(404).json({ error: `AI Subset '${subset}' not found or failed to load.` });
-  }
+    const subset = req.params.subset;
+    if (!subsets[subset]) {
+        console.warn(`Request for LoRA rankings for unknown AI subset: ${subset}`);
+        return res.status(404).json({ error: `AI Subset '${subset}' not found.` });
+    }
 
-  const { loraModels } = subsets[subset]; // Should be populated correctly by modified loadSubset
+    const { loraModels } = subsets[subset];
+    if (!loraModels || Object.keys(loraModels).length === 0) {
+        return res.json([]); // No LoRAs to rank
+    }
 
-  if (!loraModels || Object.keys(loraModels).length === 0) {
-     console.log(`No LoRA models found or loaded for subset ${subset}.`);
-     // Return empty array instead of error, means no LoRAs to rank
-     return res.json([]);
-  }
-
-
-  const ranked = Object.keys(loraModels)
-    .sort((a, b) => (loraModels[b]?.rating ?? 0) - (loraModels[a]?.rating ?? 0)) // Handle potentially null/undefined rating defensively
-    .map(lm => ({
-      lora: lm,
-      rating: loraModels[lm]?.rating ?? 1000, // Default to 1000 if rating somehow missing
-      matches: loraModels[lm]?.matches ?? 0   // Default to 0 if matches somehow missing
-    }));
-
-  res.json(ranked);
+    const ranked = Object.keys(loraModels)
+        .map(lm => ({
+            lora: lm,
+            rating: loraModels[lm]?.rating ?? 1000,
+            matches: loraModels[lm]?.matches ?? 0
+        }))
+        .sort((a, b) => b.rating - a.rating);
+    res.json(ranked);
 });
 
-
-/** Delete an image from an AI subset */
+// DELETE /api/image/:subset/:image - Delete an AI image file and its data
 app.delete('/api/image/:subset/:image', (req, res) => {
-  const { subset, image } = req.params;
-  if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
+    const { subset, image } = req.params;
+    if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
+    if (!subsets[subset].images[image]) return res.status(400).json({ error: 'Image not found in subset data.' });
 
-  const { images } = subsets[subset];
-  if (!images[image]) return res.status(400).json({ error: 'Image not found in this subset.' });
-
-  const imagePath = path.join(AI_IMAGES_DIR, subset, image);
-  // Use async unlink for better performance, but sync is fine for this app's scale
-  fs.unlink(imagePath, (err) => {
-      if (err) {
-          console.error(`Error deleting file ${imagePath}:`, err);
-          // Decide if you want to return an error or just remove from tracking
-          // Let's remove from tracking even if file delete fails for consistency
-      }
-
-      // If the image had a LoRA and was initialized, might need to adjust LoRA stats?
-      // For simplicity, just remove the image entry and save.
-      delete images[image];
-      saveSubsetRatings(subset); // Save *after* deleting the image from memory
-
-      res.json({ message: 'Image deleted successfully.', deletedFile: !err });
-  });
+    const imagePath = path.join(AI_IMAGES_DIR, subset, image);
+    fs.unlink(imagePath, (err) => { // Attempt to delete file
+        if (err && err.code !== 'ENOENT') { // Log error unless file simply wasn't there
+            console.error(`Error deleting file ${imagePath}:`, err);
+        }
+        // Always remove from internal data regardless of file deletion success
+        delete subsets[subset].images[image];
+        // TODO: Consider recalculating LoRA stats if needed, or just let them naturally adjust
+        saveSubsetRatings(subset); // Save updated data
+        res.json({ message: 'Image deleted successfully.', deletedFile: !err || err?.code === 'ENOENT' });
+    });
 });
 
-/** Get minimal matches across an AI subset (only initialized images) */
+// GET /api/progress/:subset - Get match progress for an AI subset
 app.get('/api/progress/:subset', (req, res) => {
-  const subset = req.params.subset;
-  if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
+    const subset = req.params.subset;
+    if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
 
-  const { images } = subsets[subset];
-  const initializedImages = Object.values(images).filter(img => img.rating !== null);
+    const { images } = subsets[subset];
+    const initializedImages = Object.values(images).filter(img => img.rating !== null);
+    const initializedCount = initializedImages.length;
+    const totalCount = Object.keys(images).length;
 
-  if (initializedImages.length === 0) {
-    // If no initialized images, minimal matches is effectively 0 for progress tracking
-    return res.json({ minimalMatches: 0, totalImages: Object.keys(images).length, initializedImagesCount: 0 });
-  }
+    if (initializedCount === 0) {
+        return res.json({ minimalMatches: 0, totalImages: totalCount, initializedImagesCount: 0 });
+    }
 
-  const minimalMatches = initializedImages.reduce((minVal, img) => Math.min(minVal, img.matches || 0), Infinity);
-  const totalImages = Object.keys(images).length; // Total images including uninitialized
-  const initializedImagesCount = initializedImages.length;
-
-  res.json({ minimalMatches, totalImages, initializedImagesCount });
+    const minimalMatches = initializedImages.reduce((minVal, img) => Math.min(minVal, img.matches || 0), Infinity);
+    res.json({ minimalMatches, totalImages: totalCount, initializedImagesCount: initializedCount });
 });
 
-// ------------- Normal (non-LoRA) routes -------------
 
-/** List subsets for normal images */
+// --- Normal Subset Routes ---
+
+// GET /api/normal-subsets - List available Normal subsets
 app.get('/api/normal-subsets', (req, res) => {
-  res.json(Object.keys(normalSubsets));
+    res.json(Object.keys(normalSubsets).sort((a, b) => a.localeCompare(b)));
 });
 
-/** Get a match pair or signal seeding needed from a normal subset */
+// GET /api/normal-match/:subset - Get match pair or seeding info for Normal subset
 app.get('/api/normal-match/:subset', (req, res) => {
-  const subset = req.params.subset;
-  const subsetData = normalSubsets[subset];
+    const subset = req.params.subset;
+    const subsetData = normalSubsets[subset];
+    if (!subsetData) return res.status(404).json({ error: 'Normal subset not found' });
 
-  if (!subsetData) {
-    return res.status(404).json({ error: 'Normal subset not found' });
-  }
+    const check = checkForUninitialized('normal', subset);
+    if (check.error) return res.status(404).json({ error: check.error });
 
-  const check = checkForUninitialized('normal', subset);
+    if (check.requiresSeeding) {
+        if (check.uninitializedImages.length === 0) {
+            return res.status(400).json({ error: 'Seeding required but no uninitialized images found.' });
+        }
+        shuffleArray(check.uninitializedImages);
+        return res.json({ requiresSeeding: true, uninitializedImages: check.uninitializedImages });
+    }
 
-  if (check.error) {
-      return res.status(404).json({ error: check.error });
-  }
-
-  if (check.requiresSeeding) {
-       if (check.uninitializedImages.length === 0) {
-           return res.status(400).json({ error: 'No uninitialized images found, but seeding required flag is true.' });
-       }
-      // *** SHUFFLE the list before sending ***
-      shuffleArray(check.uninitializedImages);
-      // ***************************************
-      return res.json({ requiresSeeding: true, uninitializedImages: check.uninitializedImages });
-  }
-
-  // No seeding needed, proceed with matchmaking
-  const pair = selectPair(subsetData.images);
-   if (pair.length < 2) {
-    return res.status(400).json({ error: 'Not enough initialized images to form a pair. Seed images first or add more images.' });
-  }
-
-  res.json({ image1: pair[0], image2: pair[1] });
+    const pair = selectPair(subsetData.images);
+    if (pair.length < 2) {
+        return res.status(400).json({ error: 'Not enough initialized images to form a pair.' });
+    }
+    res.json({ image1: pair[0], image2: pair[1] });
 });
 
-/** Record a vote for a normal subset */
+// POST /api/normal-vote/:subset - Record a vote for a Normal subset match
 app.post('/api/normal-vote/:subset', (req, res) => {
-  const subset = req.params.subset;
-  const { winner, loser } = req.body;
+    const subset = req.params.subset;
+    const { winner, loser } = req.body;
 
-  if (!normalSubsets[subset]) return res.status(404).json({ error: 'Normal subset not found' });
-  const { images } = normalSubsets[subset];
+    if (!normalSubsets[subset]) return res.status(404).json({ error: 'Normal subset not found' });
+    const { images } = normalSubsets[subset];
 
-   // Check if images are actually initialized before voting
-  if (images[winner]?.rating === null || images[loser]?.rating === null) {
-       return res.status(400).json({ error: 'Cannot vote on unseeded images. Please seed first.' });
-  }
+    if (!images[winner] || !images[loser]) {
+        return res.status(400).json({ error: 'Invalid winner/loser image provided.' });
+    }
+    if (images[winner]?.rating === null || images[loser]?.rating === null) {
+        return res.status(400).json({ error: 'Cannot vote on unseeded images.' });
+    }
 
-  if (!images[winner] || !images[loser]) {
-    return res.status(400).json({ error: 'Invalid winner/loser image.' });
-  }
-
-  // Update image ratings
-  updateRatings(images[winner], images[loser]);
-
-  // No LoRA to update here
-  saveNormalSubsetRatings(subset);
-  res.json({ message: 'Vote recorded for normal images.' });
+    updateRatings(images[winner], images[loser]);
+    saveNormalSubsetRatings(subset);
+    res.json({ message: 'Vote recorded for normal images.' });
 });
 
-/** Seed ratings for a normal subset */
+// POST /api/seed-ratings/normal/:subset - Seed initial ratings for Normal subset images
 app.post('/api/seed-ratings/normal/:subset', (req, res) => {
     const subset = req.params.subset;
-    const { ratings } = req.body; // { imageName: starRating, ... }
+    const { ratings } = req.body;
 
-    if (!normalSubsets[subset]) {
-        return res.status(404).json({ error: 'Normal subset not found' });
-    }
-
+    if (!normalSubsets[subset]) return res.status(404).json({ error: 'Normal subset not found' });
     const subsetImages = normalSubsets[subset].images;
     let imagesSeededCount = 0;
 
     for (const imageName in ratings) {
         const starRating = ratings[imageName];
-
-        // Validate image exists and is currently uninitialized
         if (subsetImages[imageName] && subsetImages[imageName].rating === null) {
             if (typeof starRating === 'number' && starRating >= 1 && starRating <= 10) {
                 subsetImages[imageName].rating = starToElo(starRating);
-                subsetImages[imageName].matches = 0; // Seeded images start with 0 matches
-                 imagesSeededCount++;
-            } else {
-                console.warn(`Invalid star rating ${starRating} for image ${imageName} in subset ${subset}. Skipping.`);
-           }
-        } else if (subsetImages[imageName] && subsetImages[imageName].rating !== null) {
-            console.warn(`Image ${imageName} in subset ${subset} is already seeded. Skipping.`);
-       } else {
-            console.warn(`Image ${imageName} not found in subset ${subset}. Skipping.`);
-       }
+                subsetImages[imageName].matches = 0;
+                imagesSeededCount++;
+            }
+        }
     }
 
-     if (imagesSeededCount > 0) {
+    if (imagesSeededCount > 0) {
         saveNormalSubsetRatings(subset);
-        res.json({ message: `Seeded ${imagesSeededCount} images in subset "${subset}".` });
+        res.json({ message: `Seeded ${imagesSeededCount} images in normal subset "${subset}".` });
     } else {
-        res.status(400).json({ message: 'No valid uninitialized images with ratings provided.' });
+        res.status(400).json({ message: 'No valid uninitialized normal images with ratings provided.' });
+    }
+});
+
+// GET /api/normal-elo-rankings/:subset - Get ranked list of Normal images
+app.get('/api/normal-elo-rankings/:subset', (req, res) => {
+    const subset = req.params.subset;
+    if (!normalSubsets[subset]) return res.status(404).json({ error: 'Normal subset not found' });
+
+    const { images } = normalSubsets[subset];
+    const ranked = Object.keys(images)
+        .filter(img => images[img].rating !== null)
+        .map(img => ({
+            image: img,
+            rating: images[img].rating,
+            matches: images[img].matches
+        }))
+        .sort((a, b) => b.rating - a.rating);
+    res.json(ranked);
+});
+
+// DELETE /api/normal-image/:subset/:image - Delete a Normal image file and its data
+app.delete('/api/normal-image/:subset/:image', (req, res) => {
+    const { subset, image } = req.params;
+    if (!normalSubsets[subset]) return res.status(404).json({ error: 'Normal subset not found' });
+    if (!normalSubsets[subset].images[image]) return res.status(400).json({ error: 'Image not found in normal subset data.' });
+
+    const imagePath = path.join(NORMAL_IMAGES_DIR, subset, image);
+    fs.unlink(imagePath, (err) => {
+        if (err && err.code !== 'ENOENT') {
+             console.error(`Error deleting file ${imagePath}:`, err);
+        }
+        delete normalSubsets[subset].images[image];
+        saveNormalSubsetRatings(subset);
+        res.json({ message: 'Normal image deleted successfully.', deletedFile: !err || err?.code === 'ENOENT' });
+    });
+});
+
+// GET /api/normal-progress/:subset - Get match progress for a Normal subset
+app.get('/api/normal-progress/:subset', (req, res) => {
+    const subset = req.params.subset;
+    if (!normalSubsets[subset]) return res.status(404).json({ error: 'Normal subset not found' });
+
+    const { images } = normalSubsets[subset];
+    const initializedImages = Object.values(images).filter(img => img.rating !== null);
+    const initializedCount = initializedImages.length;
+    const totalCount = Object.keys(images).length;
+
+    if (initializedCount === 0) {
+        return res.json({ minimalMatches: 0, totalImages: totalCount, initializedImagesCount: 0 });
+    }
+
+    const minimalMatches = initializedImages.reduce((minVal, img) => Math.min(minVal, img.matches || 0), Infinity);
+    res.json({ minimalMatches, totalImages: totalCount, initializedImagesCount: initializedCount });
+});
+
+// --- Tagging Route ---
+
+// POST /api/apply-tags/normal/:subset - Apply aesthetic tags based on Elo
+app.post('/api/apply-tags/normal/:subset', async (req, res) => {
+    const subset = req.params.subset;
+    const {
+        strategy = 'customQuantile', // customQuantile, equalQuantile, ponyQuantile, stdDev
+        tagPrefix = 'aesthetic_rating_',
+        binTags = ['terrible', 'bad', 'average', 'good', 'excellent'], // Default/Passed from frontend
+        numBins, // Only used for 'equalQuantile' strategy
+    } = req.body;
+
+    console.log(`Request: Apply tags for normal subset: ${subset}, Strategy: ${strategy}, Prefix: ${tagPrefix}, Tags: ${binTags.join(',')}, NumBins: ${numBins || 'N/A'}`);
+
+    if (!normalSubsets[subset]) return res.status(404).json({ error: 'Normal subset not found' });
+
+    const { images } = normalSubsets[subset];
+    const ratedImages = Object.entries(images)
+                              .filter(([_, data]) => data.rating !== null && typeof data.rating === 'number')
+                              .map(([name, data]) => ({ name, rating: data.rating }));
+
+    if (ratedImages.length === 0) return res.status(400).json({ error: `No rated images found in subset "${subset}".` });
+
+    let imageTags = {};
+    let strategyUsed = strategy;
+
+    try {
+        if (strategy === 'customQuantile') {
+            if (binTags.length !== 5) throw new Error('Custom Quantile strategy requires exactly 5 tag names.');
+            if (ratedImages.length < 5) throw new Error(`Need at least 5 rated images for Custom Quantile.`);
+            ratedImages.sort((a, b) => a.rating - b.rating);
+            const sortedScores = ratedImages.map(img => img.rating);
+            const customQuantiles = [0.1, 0.3, 0.7, 0.9, 1.0];
+            ratedImages.forEach(img => imageTags[img.name] = getTagFromQuantiles(img.rating, sortedScores, binTags, customQuantiles));
+        } else if (strategy === 'ponyQuantile') {
+            strategyUsed = 'ponyQuantile (Equal 7 Bins)';
+            const ponyTags = ['score_3', 'score_4', 'score_5', 'score_6', 'score_7', 'score_8', 'score_9'];
+            if (ratedImages.length < 7) throw new Error(`Need at least 7 rated images for Pony scoring.`);
+            ratedImages.sort((a, b) => a.rating - b.rating);
+            const sortedScores = ratedImages.map(img => img.rating);
+            const ponyQuantiles = Array.from({ length: 7 }, (_, i) => (i + 1) / 7);
+            ratedImages.forEach(img => imageTags[img.name] = getTagFromQuantiles(img.rating, sortedScores, ponyTags, ponyQuantiles));
+        } else if (strategy === 'equalQuantile') {
+            const currentNumBins = parseInt(numBins, 10);
+            if (!currentNumBins || currentNumBins < 2) throw new Error('Number of bins must be at least 2.');
+            if (binTags.length !== currentNumBins) throw new Error(`Number of tag names (${binTags.length}) must match bins (${currentNumBins}).`);
+            if (ratedImages.length < currentNumBins) throw new Error(`Need at least ${currentNumBins} rated images.`);
+            ratedImages.sort((a, b) => a.rating - b.rating);
+            const sortedScores = ratedImages.map(img => img.rating);
+            const equalQuantiles = Array.from({ length: currentNumBins }, (_, i) => (i + 1) / currentNumBins);
+            ratedImages.forEach(img => imageTags[img.name] = getTagFromQuantiles(img.rating, sortedScores, binTags, equalQuantiles));
+        } else if (strategy === 'stdDev') {
+            if (binTags.length !== 5 && binTags.length !== 7) throw new Error('Std Dev strategy requires 5 or 7 tags.');
+            if (ratedImages.length < 2) throw new Error(`Need at least 2 rated images for Std Dev.`);
+            const scores = ratedImages.map(img => img.rating);
+            const { mean, stdDev } = calculateMeanStdDev(scores);
+            ratedImages.forEach(img => imageTags[img.name] = getTagFromStdDev(img.rating, mean, stdDev, binTags));
+        } else {
+            throw new Error(`Unknown tagging strategy: ${strategy}`);
+        }
+    } catch (calcError) {
+        return res.status(400).json({ error: `Calculation Error: ${calcError.message}` });
+    }
+
+    // Process files...
+    let processedCount = 0;
+    let errorCount = 0;
+    const tagCounts = {};
+    const subsetPath = path.join(NORMAL_IMAGES_DIR, subset);
+
+    for (const img of ratedImages) {
+        const imageName = img.name;
+        const assignedTag = imageTags[imageName];
+        const finalTagValue = (strategy === 'ponyQuantile') ? assignedTag : binTags.find(t => t === assignedTag);
+
+        if (!finalTagValue) continue; // Skip if tag assignment failed
+
+        const fullTag = tagPrefix + finalTagValue;
+        tagCounts[finalTagValue] = (tagCounts[finalTagValue] || 0) + 1;
+        const baseName = path.parse(imageName).name;
+        const txtFilePath = path.join(subsetPath, `${baseName}.txt`);
+
+        try {
+            let currentContent = '';
+            try { currentContent = await fsPromises.readFile(txtFilePath, 'utf8'); }
+            catch (readError) { if (readError.code !== 'ENOENT') throw readError; }
+
+            let tags = currentContent.split(',').map(t => t.trim()).filter(t => t && !t.startsWith(tagPrefix));
+            tags.push(fullTag);
+            await fsPromises.writeFile(txtFilePath, tags.join(', '), 'utf8');
+            processedCount++;
+        } catch (err) {
+            console.error(`Error processing file for ${imageName} (${txtFilePath}):`, err);
+            errorCount++;
+        }
+    }
+
+    const message = `Tagging complete for subset "${subset}" using strategy "${strategyUsed}". Processed: ${processedCount}, Errors: ${errorCount}.`;
+    console.log(message, "Tag counts:", tagCounts);
+    res.json({ message, processed: processedCount, errors: errorCount, tagCounts });
+});
+
+
+// --- Export Routes ---
+
+// GET /api/export/:subset/images/csv - Export AI Image data
+app.get('/api/export/:subset/images/csv', (req, res) => {
+    const subset = req.params.subset;
+    if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
+    const { images } = subsets[subset];
+    const headers = ['image', 'lora', 'rating', 'matches'];
+    const rows = Object.entries(images)
+        .filter(([_, data]) => data.rating !== null)
+        .map(([name, data]) => [name, data.lora, data.rating, data.matches]);
+
+    const csv = [headers.join(','), ...rows.map(r => r.map(escapeCSV).join(','))].join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=${subset}-images.csv`);
+    res.send(csv);
+});
+
+// GET /api/export/:subset/lora/csv - Export AI LoRA data
+app.get('/api/export/:subset/lora/csv', (req, res) => {
+    const subset = req.params.subset;
+    if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
+    const { loraModels } = subsets[subset];
+    const headers = ['lora', 'rating', 'matches'];
+    const rows = Object.entries(loraModels)
+        .map(([name, data]) => [name, data.rating, data.matches]);
+
+    const csv = [headers.join(','), ...rows.map(r => r.map(escapeCSV).join(','))].join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=${subset}-lora.csv`);
+    res.send(csv);
+});
+
+// GET /api/export-normal/:subset/csv - Export Normal Image data
+app.get('/api/export-normal/:subset/csv', (req, res) => {
+    const subset = req.params.subset;
+    if (!normalSubsets[subset]) return res.status(404).json({ error: 'Normal subset not found' });
+    const { images } = normalSubsets[subset];
+    const headers = ['image', 'rating', 'matches'];
+    const rows = Object.entries(images)
+        .filter(([_, data]) => data.rating !== null)
+        .map(([name, data]) => [name, data.rating, data.matches]);
+
+    const csv = [headers.join(','), ...rows.map(r => r.map(escapeCSV).join(','))].join('\n');
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename=normal-${subset}.csv`);
+    res.send(csv);
+});
+
+
+// --- Summary Routes ---
+
+// GET /api/summary/:subset/images - Summary stats for AI Images
+app.get('/api/summary/:subset/images', (req, res) => {
+    const subset = req.params.subset;
+    if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
+    const initializedImages = Object.values(subsets[subset].images).filter(img => img.rating !== null);
+    const count = initializedImages.length;
+    if (count === 0) return res.json({ count: 0, averageRating: 0, averageMatches: 0 });
+    const averageRating = initializedImages.reduce((acc, i) => acc + i.rating, 0) / count;
+    const averageMatches = initializedImages.reduce((acc, i) => acc + i.matches, 0) / count;
+    res.json({ count, averageRating, averageMatches });
+});
+
+// GET /api/summary/:subset/lora - Summary stats for AI LoRAs
+app.get('/api/summary/:subset/lora', (req, res) => {
+    const subset = req.params.subset;
+    if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
+    const loraArray = Object.values(subsets[subset].loraModels);
+    const count = loraArray.length;
+    if (count === 0) return res.json({ count: 0, averageRating: 0, averageMatches: 0 });
+    const averageRating = loraArray.reduce((acc, i) => acc + i.rating, 0) / count;
+    const averageMatches = loraArray.reduce((acc, i) => acc + i.matches, 0) / count;
+    res.json({ count, averageRating, averageMatches });
+});
+
+// GET /api/summary-normal/:subset - Summary stats for Normal Images
+app.get('/api/summary-normal/:subset', (req, res) => {
+    const subset = req.params.subset;
+    if (!normalSubsets[subset]) return res.status(404).json({ error: 'Normal subset not found' });
+    const initializedImages = Object.values(normalSubsets[subset].images).filter(img => img.rating !== null);
+    const count = initializedImages.length;
+    if (count === 0) return res.json({ count: 0, averageRating: 0, averageMatches: 0 });
+    const averageRating = initializedImages.reduce((acc, i) => acc + i.rating, 0) / count;
+    const averageMatches = initializedImages.reduce((acc, i) => acc + i.matches, 0) / count;
+    res.json({ count, averageRating, averageMatches });
+});
+
+
+// --- Utility Routes ---
+
+// POST /api/refresh - Reload subsets from disk
+app.post('/api/refresh', (req, res) => {
+    try {
+        console.log('Refreshing directories and data...');
+        subsets = {}; // Clear current data
+        normalSubsets = {};
+        loadAllSubsets(); // Reload AI
+        loadAllNormalSubsets(); // Reload Normal
+        console.log('Reload complete.');
+        res.json({ message: 'Subsets refreshed successfully.' });
+    } catch (err) {
+        console.error('Error during refresh:', err);
+        res.status(500).json({ error: 'Failed to refresh subsets.' });
     }
 });
 
 
-/** Get image-level Elo ranking for a normal subset (only initialized images) */
-app.get('/api/normal-elo-rankings/:subset', (req, res) => {
-  const subset = req.params.subset;
-  if (!normalSubsets[subset]) return res.status(404).json({ error: 'Normal subset not found' });
+// ========================================
+// --- Helper Functions ---
+// ========================================
 
-  const { images } = normalSubsets[subset];
-   const ranked = Object.keys(images)
-    .filter(img => images[img].rating !== null) // Only include initialized images in rankings
-    .sort((a, b) => images[b].rating - images[a].rating)
-    .map(img => ({
-      image: img,
-      rating: images[img].rating,
-      matches: images[img].matches
-    }));
+// --- Directory/File System Helpers ---
 
-  res.json(ranked);
-});
-
-/** Delete an image from a normal subset */
-app.delete('/api/normal-image/:subset/:image', (req, res) => {
-  const { subset, image } = req.params;
-  if (!normalSubsets[subset]) return res.status(404).json({ error: 'Normal subset not found' });
-
-  const { images } = normalSubsets[subset];
-  if (!images[image]) return res.status(400).json({ error: 'Image not found in this normal subset.' });
-
-  const imagePath = path.join(NORMAL_IMAGES_DIR, subset, image);
-  // Use async unlink
-  fs.unlink(imagePath, (err) => {
-      if (err) {
-          console.error(`Error deleting file ${imagePath}:`, err);
-      }
-
-      delete images[image];
-      saveNormalSubsetRatings(subset); // Save *after* deleting the image from memory
-      res.json({ message: 'Normal image deleted successfully.', deletedFile: !err });
-  });
-});
-
-/** Get minimal matches across a normal subset (only initialized images) */
-app.get('/api/normal-progress/:subset', (req, res) => {
-  const subset = req.params.subset;
-  if (!normalSubsets[subset]) return res.status(404).json({ error: 'Normal subset not found' });
-
-  const { images } = normalSubsets[subset];
-  const initializedImages = Object.values(images).filter(img => img.rating !== null);
-
-  if (initializedImages.length === 0) {
-    // If no initialized images, minimal matches is effectively 0 for progress tracking
-    return res.json({ minimalMatches: 0, totalImages: Object.keys(images).length, initializedImagesCount: 0 });
-  }
-
-  const minimalMatches = initializedImages.reduce((minVal, img) => Math.min(minVal, img.matches || 0), Infinity);
-  const totalImages = Object.keys(images).length; // Total images including uninitialized
-  const initializedImagesCount = initializedImages.length;
-
-  res.json({ minimalMatches, totalImages, initializedImagesCount });
-});
-
-
-// ------------- CSV Export & Summaries for AI images -------------
-function escapeCSV(value) {
-  if (value === null || value === undefined) {
-    return '';
-  }
-  const strValue = String(value);
-  if (strValue.includes('"') || strValue.includes(',') || strValue.includes('\n')) {
-    return '"' + strValue.replace(/"/g, '""') + '"';
-  }
-  return strValue;
+function ensureDirectoriesExist() {
+    [AI_IMAGES_DIR, NORMAL_IMAGES_DIR, DATA_DIR].forEach(dir => {
+        if (!fs.existsSync(dir)) {
+            try {
+                fs.mkdirSync(dir, { recursive: true });
+                console.log(`Created directory: ${dir}`);
+            } catch (err) {
+                console.error(`Failed to create directory ${dir}:`, err);
+                // Depending on severity, you might want to exit here
+            }
+        }
+    });
 }
 
-// Export images from AI subsets (only initialized images)
-app.get('/api/export/:subset/images/csv', (req, res) => {
-  const subset = req.params.subset;
-  if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
+/** Saves AI subset ratings to JSON */
+function saveSubsetRatings(subset) {
+    if (!subsets[subset]) return;
+    const { images, loraModels } = subsets[subset];
+    const ratings = {};
+    const matchCount = {};
+    const loraModelRatings = {};
 
-  const { images } = subsets[subset];
-  const headers = ['image', 'lora', 'rating', 'matches'];
-  const rows = Object.keys(images)
-    .filter(img => images[img].rating !== null) // Only export initialized images
-    .map(img => [
-      img,
-      images[img].lora,
-      images[img].rating,
-      images[img].matches
-    ]);
+    Object.entries(images).forEach(([name, data]) => {
+        if (data.rating !== null) {
+            ratings[name] = data.rating;
+            matchCount[name] = data.matches;
+            // Include LoRA in saved image data? Maybe not needed if loaded from file/JSON loraModels
+        }
+    });
 
-  const csv = [headers.join(','), ...rows.map(r => r.map(escapeCSV).join(','))].join('\n');
-  res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', `attachment; filename=${subset}-images.csv`);
-  res.send(csv);
-});
+    Object.entries(loraModels).forEach(([name, data]) => {
+        loraModelRatings[name] = { rating: data.rating, count: data.matches };
+    });
 
-// Export LoRA from AI subsets
-app.get('/api/export/:subset/lora/csv', (req, res) => {
-  const subset = req.params.subset;
-  if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
+    const ratingFile = path.join(DATA_DIR, `ratings-${subset}.json`);
+    try {
+        fs.writeFileSync(ratingFile, JSON.stringify({ ratings, matchCount, loraModelRatings }, null, 2));
+    } catch (err) {
+        console.error(`Failed to save AI ratings for ${subset}:`, err);
+    }
+}
 
-  const { loraModels } = subsets[subset];
-  const headers = ['lora', 'rating', 'matches'];
-  const rows = Object.keys(loraModels).map(lm => [
-    lm,
-    loraModels[lm].rating,
-    loraModels[lm].matches
-  ]);
+/** Saves Normal subset ratings to JSON */
+function saveNormalSubsetRatings(subset) {
+    if (!normalSubsets[subset]) return;
+    const { images } = normalSubsets[subset];
+    const ratings = {};
+    const matchCount = {};
 
-  const csv = [headers.join(','), ...rows.map(r => r.map(escapeCSV).join(','))].join('\n');
-  res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', `attachment; filename=${subset}-lora.csv`);
-  res.send(csv);
-});
+    Object.entries(images).forEach(([name, data]) => {
+        if (data.rating !== null) {
+            ratings[name] = data.rating;
+            matchCount[name] = data.matches;
+        }
+    });
 
-// Summary Stats for AI images (only initialized images)
-app.get('/api/summary/:subset/images', (req, res) => {
-  const subset = req.params.subset;
-  if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
+    const ratingFile = path.join(DATA_DIR, `ratings-normal-${subset}.json`);
+    try {
+        fs.writeFileSync(ratingFile, JSON.stringify({ ratings, matchCount }, null, 2));
+    } catch (err) {
+        console.error(`Failed to save Normal ratings for ${subset}:`, err);
+    }
+}
 
-  const { images } = subsets[subset];
-  const initializedImages = Object.values(images).filter(img => img.rating !== null);
+// --- Subset Loading Helpers ---
 
-  if (initializedImages.length === 0) {
-    return res.json({ count: 0, averageRating: 0, averageMatches: 0 });
-  }
-  const count = initializedImages.length;
-  const averageRating = initializedImages.reduce((acc, i) => acc + i.rating, 0) / count;
-  const averageMatches = initializedImages.reduce((acc, i) => acc + i.matches, 0) / count;
-  res.json({ count, averageRating, averageMatches });
-});
+/** Loads all AI subsets from disk (images and/or data files) */
+function loadAllSubsets() {
+    const discoveredSubsets = new Set();
+    // Discover from AI_images dir
+    if (fs.existsSync(AI_IMAGES_DIR)) {
+        try {
+            fs.readdirSync(AI_IMAGES_DIR)
+              .filter(dir => { try { return fs.statSync(path.join(AI_IMAGES_DIR, dir)).isDirectory(); } catch { return false; } })
+              .forEach(subset => discoveredSubsets.add(subset));
+        } catch (err) { console.error(`Error reading AI_images directory: ${err.message}`); }
+    }
+    // Discover from data dir
+    if (fs.existsSync(DATA_DIR)) {
+        try {
+           fs.readdirSync(DATA_DIR)
+             .filter(file => /^ratings-(?!normal-).+\.json$/.test(file))
+             .forEach(file => {
+                 const match = file.match(/^ratings-(.+)\.json$/);
+                 if (match?.[1]) discoveredSubsets.add(match[1]);
+             });
+       } catch(err) { console.error(`Error reading data directory: ${err.message}`); }
+   }
 
-// Summary Stats for LoRAs
-app.get('/api/summary/:subset/lora', (req, res) => {
-  const subset = req.params.subset;
-  if (!subsets[subset]) return res.status(404).json({ error: 'Subset not found' });
+    const allSubsetNames = Array.from(discoveredSubsets);
+    if (allSubsetNames.length === 0) { console.log('\nNo AI subsets found.'); return; }
 
-  const { loraModels } = subsets[subset];
-  const loraArray = Object.values(loraModels);
-  if (loraArray.length === 0) {
-    return res.json({ count: 0, averageRating: 0, averageMatches: 0 });
-  }
-  const count = loraArray.length;
-  const averageRating = loraArray.reduce((acc, i) => acc + i.rating, 0) / count;
-  const averageMatches = loraArray.reduce((acc, i) => acc + i.matches, 0) / count;
-  res.json({ count, averageRating, averageMatches });
-});
+    console.log(`Loading AI subsets: ${allSubsetNames.join(', ')}`);
+    allSubsetNames.forEach(loadSubset);
+}
 
-// ------------- CSV Export & Summaries for normal images -------------
+/** Loads a single AI subset (images + data) */
+function loadSubset(subset) {
+    console.log(`Loading AI subset "${subset}"...`);
+    const subsetPath = path.join(AI_IMAGES_DIR, subset);
+    const ratingFile = path.join(DATA_DIR, `ratings-${subset}.json`);
+    let savedData = { ratings: {}, matchCount: {}, loraModelRatings: {} };
+    let directoryExists = false;
+    let files = [];
 
-/** Export normal images as CSV (only initialized images) */
-app.get('/api/export-normal/:subset/csv', (req, res) => {
-  const subset = req.params.subset;
-  if (!normalSubsets[subset]) return res.status(404).json({ error: 'Normal subset not found' });
+    if (fs.existsSync(ratingFile)) {
+        try { savedData = JSON.parse(fs.readFileSync(ratingFile, 'utf8')); }
+        catch (e) { console.error(`Error parsing ${ratingFile}:`, e.message); }
+    }
 
-  const { images } = normalSubsets[subset];
-  const headers = ['image', 'rating', 'matches'];
-  const rows = Object.keys(images)
-     .filter(img => images[img].rating !== null) // Only export initialized images
-     .map(img => [
-      img,
-      images[img].rating,
-      images[img].matches
-    ]);
+    try {
+        if (fs.existsSync(subsetPath) && fs.statSync(subsetPath).isDirectory()) {
+            directoryExists = true;
+            files = fs.readdirSync(subsetPath).filter(file => file.toLowerCase().endsWith('.png'));
+        }
+    } catch (dirErr) { console.warn(`Error accessing ${subsetPath}: ${dirErr.message}. Loading offline.`); }
 
-  const csv = [headers.join(','), ...rows.map(r => r.map(escapeCSV).join(','))].join('\n');
-  res.setHeader('Content-Type', 'text/csv');
-  res.setHeader('Content-Disposition', `attachment; filename=normal-${subset}.csv`);
-  res.send(csv);
-});
+    let images = {};
+    let loraModels = {};
 
-/** Summary stats for normal images (only initialized images) */
-app.get('/api/summary-normal/:subset', (req, res) => {
-  const subset = req.params.subset;
-  if (!normalSubsets[subset]) return res.status(404).json({ error: 'Normal subset not found' });
+    // Init LoRAs from saved data
+    if (savedData.loraModelRatings) {
+        for (const loraName in savedData.loraModelRatings) {
+            loraModels[loraName] = {
+                rating: savedData.loraModelRatings[loraName]?.rating ?? 1000,
+                matches: savedData.loraModelRatings[loraName]?.count ?? 0
+            };
+        }
+    }
 
-  const { images } = normalSubsets[subset];
-  const initializedImages = Object.values(images).filter(img => img.rating !== null);
+    // Process image files if directory exists
+    if (directoryExists) {
+        files.forEach(file => {
+            const imagePath = path.join(subsetPath, file);
+            const loraFromFile = getPngMetadata(imagePath);
+            const savedRating = savedData.ratings?.[file] ?? null;
+            const savedMatches = savedData.matchCount?.[file] ?? null;
 
-  if (initializedImages.length === 0) {
-    return res.json({ count: 0, averageRating: 0, averageMatches: 0 });
-  }
-  const count = initializedImages.length;
-  const averageRating = initializedImages.reduce((acc, i) => acc + i.rating, 0) / count;
-  const averageMatches = initializedImages.reduce((acc, i) => acc + i.matches, 0) / count;
-  res.json({ count, averageRating, averageMatches });
-});
+            // Only track image if it has metadata OR was previously saved/rated
+            if (loraFromFile || savedRating !== null) {
+                images[file] = {
+                    rating: savedRating,
+                    matches: savedRating !== null ? (savedMatches ?? 0) : null,
+                    lora: loraFromFile || (savedData.images?.[file]?.lora ?? '')
+                };
+                // Ensure LoRA model exists if found in file
+                if (loraFromFile && loraFromFile !== 'NONE' && !loraModels[loraFromFile]) {
+                    loraModels[loraFromFile] = { rating: 1000, matches: 0 };
+                }
+            }
+        });
+    }
 
-// Refresh without restarting server
-app.post('/api/refresh', (req, res) => {
-  try {
-    console.log('Refreshing directories...');
-    // Clear existing subsets
-    subsets = {};
-    normalSubsets = {};
+    // Add images present only in saved data
+    if (savedData.ratings) {
+        for (const savedFile in savedData.ratings) {
+            if (!images[savedFile]) { // If not loaded from directory
+                images[savedFile] = {
+                    rating: savedData.ratings[savedFile],
+                    matches: savedData.matchCount?.[savedFile] ?? 0,
+                    lora: savedData.images?.[savedFile]?.lora ?? ''
+                };
+                 // Ensure LoRA model exists if mentioned in saved image data (less reliable)
+                 const savedLora = savedData.images?.[savedFile]?.lora;
+                 if (savedLora && savedLora !== 'NONE' && !loraModels[savedLora]) {
+                     // Check if this LoRA exists in loraModelRatings first
+                     if (!savedData.loraModelRatings?.[savedLora]) {
+                          loraModels[savedLora] = { rating: 1000, matches: 0 }; // Initialize if completely new
+                     }
+                 }
+            }
+        }
+    }
 
-    // Reload all subsets from the directories
-    loadAllSubsets();
-    loadAllNormalSubsets();
-
-    console.log('Directories refreshed.');
-    res.json({ message: 'Directories refreshed successfully.' });
-  } catch (err) {
-    console.error('Error refreshing directories:', err);
-    res.status(500).json({ error: 'Failed to refresh directories.' });
-  }
-});
+    subsets[subset] = { images, loraModels };
+    console.log(`Loaded AI subset "${subset}". Images: ${Object.keys(images).length}, LoRAs: ${Object.keys(loraModels).length}. Mode: ${directoryExists ? 'Online' : 'Offline'}`);
+}
 
 
+/** Loads all Normal subsets from disk */
+function loadAllNormalSubsets() {
+    if (!fs.existsSync(NORMAL_IMAGES_DIR)) return;
+    try {
+        fs.readdirSync(NORMAL_IMAGES_DIR)
+            .filter(dir => { try { return fs.statSync(path.join(NORMAL_IMAGES_DIR, dir)).isDirectory(); } catch { return false; } })
+            .forEach(loadNormalSubset);
+    } catch (err) {
+        console.error(`Error reading normal_images directory: ${err.message}`);
+    }
+}
+
+/** Loads a single Normal subset */
+function loadNormalSubset(subset) {
+    const subsetPath = path.join(NORMAL_IMAGES_DIR, subset);
+    const ratingFile = path.join(DATA_DIR, `ratings-normal-${subset}.json`);
+    let savedData = { ratings: {}, matchCount: {} };
+    let files = [];
+
+    try { files = fs.readdirSync(subsetPath).filter(f => /\.(png|jpg|jpeg|webp|bmp|gif)$/i.test(f)); }
+    catch(err) { console.error(`Error reading normal subset directory ${subsetPath}:`, err); return; }
+
+    if (fs.existsSync(ratingFile)) {
+        try { savedData = JSON.parse(fs.readFileSync(ratingFile, 'utf8')); }
+        catch (e) { console.error(`Error parsing ${ratingFile}:`, e.message); }
+    }
+
+    let images = {};
+    files.forEach(file => {
+        const isInitialized = savedData.ratings?.hasOwnProperty(file);
+        images[file] = {
+            rating: isInitialized ? savedData.ratings[file] : null,
+            matches: isInitialized ? (savedData.matchCount?.[file] ?? 0) : null,
+            lora: ''
+        };
+    });
+
+    normalSubsets[subset] = { images };
+    console.log(`Loaded Normal subset "${subset}". Images: ${Object.keys(images).length}`);
+}
+
+// --- Metadata Parsing Helpers ---
+
+function getPngMetadata(imagePath) {
+    try {
+        const buffer = pngMetadata.readFileSync(imagePath);
+        const chunks = pngMetadata.splitChunk(buffer);
+        const textChunks = chunks.filter(c => c.type === 'tEXt').map(c => parseTextChunk(c.data));
+
+        const parametersChunk = textChunks.find(c => c.keyword === 'parameters');
+        if (parametersChunk?.text) {
+            const loraMatch = parametersChunk.text.match(/<lora:([^:]+):([^>]+)>/);
+            if (loraMatch?.[1]) {
+                const name = loraMatch[1].trim();
+                const strength = loraMatch[2] || "";
+                return name + (strength ? `:${strength}` : "");
+            }
+            return "NONE"; // Parameters exist, but no LoRA
+        }
+
+        const promptChunk = textChunks.find(c => c.keyword === 'prompt');
+        if (promptChunk?.text) {
+            try {
+                const name = extractLoraFromComfyUI(JSON.parse(promptChunk.text));
+                if (name) return name;
+            } catch {}
+        }
+
+        const workflowChunk = textChunks.find(c => c.keyword === 'workflow');
+        if (workflowChunk?.text) {
+            try {
+                const name = extractLoraFromWorkflow(JSON.parse(workflowChunk.text));
+                if (name) return name;
+            } catch {}
+        }
+
+        return ''; // No known metadata found
+    } catch (err) {
+        // Ignore errors like file not found during parsing if dir deleted mid-op
+        if (err.code !== 'ENOENT') {
+           console.error(`Error parsing PNG ${imagePath}:`, err.message);
+        }
+        return '';
+    }
+}
+
+function parseTextChunk(dataBuffer) {
+    const rawStr = dataBuffer.toString('latin1'); // Use latin1 for robustness
+    const nullIndex = rawStr.indexOf('\0');
+    if (nullIndex === -1) return { keyword: '', text: rawStr };
+    return { keyword: rawStr.slice(0, nullIndex), text: rawStr.slice(nullIndex + 1) };
+}
+
+function extractLoraFromComfyUI(jsonData) {
+    if (typeof jsonData !== 'object' || jsonData === null) return '';
+    for (const key in jsonData) {
+        const node = jsonData[key];
+        if (node?.class_type === 'LoraLoader') {
+            const name = extractNameFromLoraNode(node);
+            if (name) return name;
+        }
+    }
+    return '';
+}
+
+function extractLoraFromWorkflow(jsonData) {
+    if (!jsonData?.nodes || !Array.isArray(jsonData.nodes)) return '';
+    for (const node of jsonData.nodes) {
+        if (node?.class_type === 'LoraLoader') {
+            const name = extractNameFromLoraNode(node);
+            if (name) return name;
+        }
+    }
+    return '';
+}
+
+function extractNameFromLoraNode(node) {
+    if (typeof node?.inputs?.lora_name === 'string') {
+        return extractLoraNameFromPath(node.inputs.lora_name);
+    }
+    if (Array.isArray(node?.inputs?.lora_name) && typeof node.inputs.lora_name[0] === 'string') {
+        return extractLoraNameFromPath(node.inputs.lora_name[0]);
+    }
+    if (Array.isArray(node?.widgets_values) && typeof node.widgets_values[0] === 'string') {
+        return extractLoraNameFromPath(node.widgets_values[0]);
+    }
+    return '';
+}
+
+function extractLoraNameFromPath(loraPath) {
+    if (typeof loraPath !== 'string') return '';
+    let name = path.basename(loraPath); // Use path.basename for cross-platform safety
+    name = name.replace(/\.(safetensors|ckpt|pt|bin)$/i, '');
+    return name.trim();
+}
+
+// --- Elo Rating Helpers ---
+
+/** Converts 1-10 star rating to initial Elo */
+function starToElo(starRating) {
+    starRating = Math.max(1, Math.min(10, starRating));
+    return 1000 + (starRating - 5) * 100;
+}
+
+/** Updates Elo ratings for winner and loser */
+function updateRatings(winner, loser) {
+    const winnerRating = winner.rating ?? 1000; // Use 1000 if null
+    const loserRating = loser.rating ?? 1000;
+    const getK = (m) => (m === null || m < 10) ? 64 : (m < 20 ? 48 : (m < 30 ? 32 : 24));
+    const kWinner = getK(winner.matches);
+    const kLoser = getK(loser.matches);
+    const expectedWinner = 1 / (1 + 10 ** ((loserRating - winnerRating) / 400));
+
+    winner.rating = winnerRating + kWinner * (1 - expectedWinner);
+    loser.rating = loserRating + kLoser * (0 - (1 - expectedWinner)); // Corrected expectedLoser = 1 - expectedWinner
+
+    winner.matches = (winner.matches ?? 0) + 1;
+    loser.matches = (loser.matches ?? 0) + 1;
+}
+
+// --- Matchmaking Helper ---
+
+/** Selects the next pair for comparison */
+function selectPair(images) {
+    const keys = Object.keys(images).filter(img => images[img].rating !== null);
+    if (keys.length < 2) return [];
+
+    // Simplified random pair selection (replace with priority logic if needed)
+    // For now, just pick two different random images
+    let idx1 = Math.floor(Math.random() * keys.length);
+    let idx2 = Math.floor(Math.random() * keys.length);
+    while (idx2 === idx1) {
+         idx2 = Math.floor(Math.random() * keys.length);
+    }
+    return [keys[idx1], keys[idx2]];
+    // NOTE: Keep the original priority logic if you prefer that matchmaking method
+    /*
+    const getPriority = (img1, img2) => { ... }; // Original priority calculation
+    let bestPair = [keys[0], keys[1]];
+    let bestScore = getPriority(keys[0], keys[1]);
+    // ... nested loops to find best pair ...
+    return bestPair;
+    */
+}
+
+/** Checks if a subset needs seeding */
+function checkForUninitialized(subsetType, subsetName) {
+    const subsetData = subsetType === 'ai' ? subsets[subsetName] : normalSubsets[subsetName];
+    if (!subsetData) return { error: `${subsetType === 'ai' ? 'AI' : 'Normal'} subset not found` };
+    const uninitialized = Object.keys(subsetData.images).filter(name => subsetData.images[name].rating === null);
+    return { requiresSeeding: uninitialized.length > 0, uninitializedImages: uninitialized };
+}
+
+// --- Tagging Helpers ---
+
+/** Calculates Mean and Standard Deviation */
+function calculateMeanStdDev(numbers) {
+    const n = numbers.length;
+    if (n === 0) return { mean: 0, stdDev: 0 };
+    const mean = numbers.reduce((a, b) => a + b, 0) / n;
+    if (n === 1) return { mean: mean, stdDev: 0 };
+    const variance = numbers.reduce((a, b) => a + (b - mean) ** 2, 0) / n;
+    return { mean, stdDev: Math.sqrt(variance) };
+}
+
+/** Determines tag based on Standard Deviation */
+function getTagFromStdDev(score, mean, stdDev, tags) {
+    if (stdDev === 0) return tags[Math.floor(tags.length / 2)];
+    if (tags.length === 5) { // Example thresholds
+        if (score < mean - 1.5 * stdDev) return tags[0];
+        if (score < mean - 0.5 * stdDev) return tags[1];
+        if (score <= mean + 0.5 * stdDev) return tags[2];
+        if (score <= mean + 1.5 * stdDev) return tags[3];
+        return tags[4];
+    } else if (tags.length === 7) { // Example thresholds
+        if (score < mean - 1.75 * stdDev) return tags[0];
+        if (score < mean - 1.0 * stdDev) return tags[1];
+        if (score < mean - 0.25 * stdDev) return tags[2];
+        if (score <= mean + 0.25 * stdDev) return tags[3];
+        if (score <= mean + 1.0 * stdDev) return tags[4];
+        if (score <= mean + 1.75 * stdDev) return tags[5];
+        return tags[6];
+    }
+    console.warn(`StdDev tagging undefined for ${tags.length} bins.`);
+    return tags[Math.floor(tags.length / 2)];
+}
+
+/** Determines tag based on Quantiles */
+function getTagFromQuantiles(score, sortedScores, tags, quantiles) {
+    const total = sortedScores.length;
+    if (total === 0) return tags[Math.floor(tags.length / 2)];
+    // Find rank (index) - handle edge cases and duplicates
+    let rank = sortedScores.findIndex(s => s >= score); // Find first score >= current score
+    if (rank === -1) rank = total - 1; // If score is highest, rank is last index
+
+    const percentile = (rank + 1) / total;
+
+    for (let i = 0; i < quantiles.length; i++) {
+        // Use a tiny epsilon for floating point comparisons at boundaries
+        if (percentile <= quantiles[i] + 1e-9) {
+            return tags[i];
+        }
+    }
+    return tags[tags.length - 1]; // Fallback
+}
+
+// --- Utility Helpers ---
+
+/** Shuffles array in place */
+function shuffleArray(array) {
+    for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+    }
+}
+
+/** Escapes values for CSV export */
+function escapeCSV(value) {
+    if (value == null) return ''; // Handle null/undefined
+    const str = String(value);
+    if (/[",\n]/.test(str)) {
+        return `"${str.replace(/"/g, '""')}"`;
+    }
+    return str;
+}
+
+// ========================================
+// --- Server Start ---
+// ========================================
 app.listen(3000, () => {
-  console.log('Server running on port 3000. Open http://localhost:3000 in your browser.');
+    console.log('-----------------------------------------------------');
+    console.log(' Blind LoRA/Image Ranker Server Started');
+    console.log(' Access UI at: http://localhost:3000');
+    console.log('-----------------------------------------------------');
 });
