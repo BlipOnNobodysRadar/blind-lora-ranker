@@ -53,8 +53,8 @@
 
   <div class="ranking-header" id="ranking-header">
     <span data-sort="lora">LoRA Model</span>
-    <span data-sort="matches">Matches</span>
     <span data-sort="rating">Rating</span>
+    <span data-sort="matches">Matches</span>
   </div>
   
   <div class="ranking-container" id="ranking-container"></div>
@@ -125,40 +125,49 @@
     }
 
     function renderRankings() {
-      sortRankings();
+      sortRankings(); // Assuming sortRankings function exists and works
       const rankingContainer = document.getElementById('ranking-container');
+      if (!rankingContainer) return; // Guard clause
       rankingContainer.innerHTML = '';
-      const searchTerm = document.getElementById('search').value.toLowerCase();
+      const searchTerm = (document.getElementById('search')?.value || '').toLowerCase(); // Optional chaining for search element
 
-      let allMinimumReached = true;
-      loraData
+      let allMinimumReached = true; // Assuming this logic exists
+      const minThreshold = 5; // Define minimum threshold for notification check
+      const maxMatchesForBar = 20; // Define max value for progress bar scaling
+
+      loraData // Assuming loraData is populated correctly
         .filter(item => item.lora.toLowerCase().includes(searchTerm))
         .forEach(item => {
-          const progressPercentage = Math.min((item.matches / 20) * 100, 100);
-          if (item.matches < 5) {
+          // Calculate progress - use maxMatchesForBar
+          const progressPercentage = Math.min(((item.matches || 0) / maxMatchesForBar) * 100, 100);
+          if ((item.matches || 0) < minThreshold) {
             allMinimumReached = false;
           }
 
           const rankingItem = document.createElement('div');
-          rankingItem.className = 'ranking-item';
+          rankingItem.className = 'ranking-item'; // Use the class styled by CSS
+
+          // **** CORRECTED ORDER OF SPANS TO MATCH HEADER ****
           rankingItem.innerHTML = `
             <span><strong>${item.lora}</strong></span>
-            <span>Rating: ${item.rating.toFixed(2)}</span>
-            <span>Matches: ${item.matches}</span>
+            <span>Rating: ${item.rating?.toFixed(2) ?? 'N/A'}</span>
+            <span>Matches: ${item.matches ?? 0}</span>
             <div class="progress-bar-container">
               <div class="progress-bar-background"></div>
               <div class="progress-bar" style="width: ${progressPercentage}%;"></div>
             </div>
           `;
+          // **** END CORRECTION ****
+
           rankingContainer.appendChild(rankingItem);
         });
 
-      // Notification
+      // Update Notification (assuming this element exists)
       const notification = document.getElementById('notification');
-      if (allMinimumReached && loraData.length > 0) {
-        notification.style.display = 'block';
+      if (notification) {
+        notification.style.display = (allMinimumReached && loraData.length > 0) ? 'block' : 'none';
       } else {
-        notification.style.display = 'none';
+         // console.warn("Notification element not found.");
       }
     }
 
