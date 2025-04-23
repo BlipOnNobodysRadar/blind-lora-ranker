@@ -342,13 +342,15 @@ app.get('/api/normal-progress/:subset', (req, res) => {
 app.post('/api/apply-tags/normal/:subset', async (req, res) => {
     const subset = req.params.subset;
     const {
-        strategy = 'customQuantile', // customQuantile, equalQuantile, ponyQuantile, stdDev
+        strategy = 'customQuantile', // customQuantile, equalQuantile, ponyQuantile, stdDev, kmeans, rangeNormalization
         tagPrefix = 'aesthetic_rating_',
-        binTags = ['terrible', 'bad', 'average', 'good', 'excellent'], // Default/Passed from frontend
-        numBins, // Only used for 'equalQuantile' strategy
+        binTags = ['terrible', 'bad', 'average', 'good', 'excellent'],
+        numBins, // For equalQuantile
+        numClusters, // For kmeans
+        rangeThresholds // For rangeNormalization (e.g., [0.15, 0.35, 0.65, 0.85])
     } = req.body;
 
-    console.log(`Request: Apply tags for normal subset: ${subset}, Strategy: ${strategy}, Prefix: ${tagPrefix}, Tags: ${binTags.join(',')}, NumBins: ${numBins || 'N/A'}`);
+    console.log(`Request: Apply tags for subset: ${subset}, Strategy: ${strategy}, Prefix: ${tagPrefix}`);
 
     if (!normalSubsets[subset]) return res.status(404).json({ error: 'Normal subset not found' });
 
@@ -359,48 +361,117 @@ app.post('/api/apply-tags/normal/:subset', async (req, res) => {
 
     if (ratedImages.length === 0) return res.status(400).json({ error: `No rated images found in subset "${subset}".` });
 
-    let imageTags = {};
-    let strategyUsed = strategy;
+    let imageTags = {}; // { imageName: 'tag_name', ... }
+    let effectiveBinTags = [...binTags]; // Use provided tags unless overridden by strategy
+    let effectiveStrategy = strategy; // For logging
 
     try {
-        if (strategy === 'customQuantile') {
-            if (binTags.length !== 5) throw new Error('Custom Quantile strategy requires exactly 5 tag names.');
-            if (ratedImages.length < 5) throw new Error(`Need at least 5 rated images for Custom Quantile.`);
-            ratedImages.sort((a, b) => a.rating - b.rating);
-            const sortedScores = ratedImages.map(img => img.rating);
-            const customQuantiles = [0.1, 0.3, 0.7, 0.9, 1.0];
-            ratedImages.forEach(img => imageTags[img.name] = getTagFromQuantiles(img.rating, sortedScores, binTags, customQuantiles));
-        } else if (strategy === 'ponyQuantile') {
-            strategyUsed = 'ponyQuantile (Equal 7 Bins)';
-            const ponyTags = ['score_3', 'score_4', 'score_5', 'score_6', 'score_7', 'score_8', 'score_9'];
-            if (ratedImages.length < 7) throw new Error(`Need at least 7 rated images for Pony scoring.`);
-            ratedImages.sort((a, b) => a.rating - b.rating);
-            const sortedScores = ratedImages.map(img => img.rating);
-            const ponyQuantiles = Array.from({ length: 7 }, (_, i) => (i + 1) / 7);
-            ratedImages.forEach(img => imageTags[img.name] = getTagFromQuantiles(img.rating, sortedScores, ponyTags, ponyQuantiles));
-        } else if (strategy === 'equalQuantile') {
-            const currentNumBins = parseInt(numBins, 10);
-            if (!currentNumBins || currentNumBins < 2) throw new Error('Number of bins must be at least 2.');
-            if (binTags.length !== currentNumBins) throw new Error(`Number of tag names (${binTags.length}) must match bins (${currentNumBins}).`);
-            if (ratedImages.length < currentNumBins) throw new Error(`Need at least ${currentNumBins} rated images.`);
-            ratedImages.sort((a, b) => a.rating - b.rating);
-            const sortedScores = ratedImages.map(img => img.rating);
-            const equalQuantiles = Array.from({ length: currentNumBins }, (_, i) => (i + 1) / currentNumBins);
-            ratedImages.forEach(img => imageTags[img.name] = getTagFromQuantiles(img.rating, sortedScores, binTags, equalQuantiles));
-        } else if (strategy === 'stdDev') {
-            if (binTags.length !== 5 && binTags.length !== 7) throw new Error('Std Dev strategy requires 5 or 7 tags.');
-            if (ratedImages.length < 2) throw new Error(`Need at least 2 rated images for Std Dev.`);
-            const scores = ratedImages.map(img => img.rating);
-            const { mean, stdDev } = calculateMeanStdDev(scores);
-            ratedImages.forEach(img => imageTags[img.name] = getTagFromStdDev(img.rating, mean, stdDev, binTags));
-        } else {
-            throw new Error(`Unknown tagging strategy: ${strategy}`);
+        // --- Apply Binning Strategy ---
+        switch (strategy) {
+            case 'customQuantile':
+                if (effectiveBinTags.length !== 5) throw new Error('Custom Quantile strategy requires exactly 5 tag names.');
+                if (ratedImages.length < 5) throw new Error(`Need at least 5 rated images.`);
+                ratedImages.sort((a, b) => a.rating - b.rating);
+                const sortedScoresCQ = ratedImages.map(img => img.rating);
+                const customQuantiles = [0.1, 0.3, 0.7, 0.9, 1.0]; // 10/20/40/20/10
+                ratedImages.forEach(img => imageTags[img.name] = getTagFromQuantiles(img.rating, sortedScoresCQ, effectiveBinTags, customQuantiles));
+                break;
+
+            case 'ponyQuantile':
+                effectiveStrategy = 'ponyQuantile (Equal 7 Bins)';
+                effectiveBinTags = ['score_3', 'score_4', 'score_5', 'score_6', 'score_7', 'score_8', 'score_9']; // Override tags
+                if (ratedImages.length < 7) throw new Error(`Need at least 7 rated images.`);
+                ratedImages.sort((a, b) => a.rating - b.rating);
+                const sortedScoresPony = ratedImages.map(img => img.rating);
+                const ponyQuantiles = Array.from({ length: 7 }, (_, i) => (i + 1) / 7);
+                ratedImages.forEach(img => imageTags[img.name] = getTagFromQuantiles(img.rating, sortedScoresPony, effectiveBinTags, ponyQuantiles));
+                break;
+
+            case 'equalQuantile':
+                const currentNumBinsEQ = parseInt(numBins, 10);
+                if (!currentNumBins || currentNumBins < 2) throw new Error('Number of bins must be at least 2.');
+                if (effectiveBinTags.length !== currentNumBins) throw new Error(`Tag names count (${effectiveBinTags.length}) must match bins (${currentNumBins}).`);
+                if (ratedImages.length < currentNumBins) throw new Error(`Need at least ${currentNumBins} rated images.`);
+                ratedImages.sort((a, b) => a.rating - b.rating);
+                const sortedScoresEQ = ratedImages.map(img => img.rating);
+                const equalQuantiles = Array.from({ length: currentNumBins }, (_, i) => (i + 1) / currentNumBins);
+                ratedImages.forEach(img => imageTags[img.name] = getTagFromQuantiles(img.rating, sortedScoresEQ, effectiveBinTags, equalQuantiles));
+                break;
+
+            case 'stdDev':
+                 if (effectiveBinTags.length !== 5 && effectiveBinTags.length !== 7) throw new Error('Std Dev strategy requires 5 or 7 tags.');
+                 if (ratedImages.length < 2) throw new Error(`Need at least 2 rated images.`);
+                 const scoresStdDev = ratedImages.map(img => img.rating);
+                 const { mean, stdDev } = calculateMeanStdDev(scoresStdDev);
+                 console.log(`Using Standard Deviation: Mean=${mean.toFixed(2)}, StdDev=${stdDev.toFixed(2)}`);
+                 ratedImages.forEach(img => imageTags[img.name] = getTagFromStdDev(img.rating, mean, stdDev, effectiveBinTags));
+                 break;
+
+            case 'kmeans':
+                const k = parseInt(numClusters, 10) || 5; // Default K = 5 if not provided/invalid
+                if (k < 2) throw new Error('Number of clusters (K) must be at least 2.');
+                if (effectiveBinTags.length !== k) throw new Error(`Tag names count (${effectiveBinTags.length}) must match K (${k}).`);
+                if (ratedImages.length < k) throw new Error(`Need at least K (${k}) rated images.`);
+                const scoresKmeans = ratedImages.map(img => img.rating);
+                const { assignments, centroids } = kmeans1D(scoresKmeans, k);
+                // Sort centroids to map tags correctly
+                const sortedCentroids = centroids
+                    .map((centroid, index) => ({ centroid, index }))
+                    .sort((a, b) => a.centroid - b.centroid);
+                const clusterIndexToTag = {};
+                sortedCentroids.forEach((item, i) => {
+                    clusterIndexToTag[item.index] = effectiveBinTags[i];
+                });
+                ratedImages.forEach((img, i) => {
+                    const clusterIndex = assignments[i];
+                    imageTags[img.name] = clusterIndexToTag[clusterIndex];
+                });
+                console.log(`Using K-Means: K=${k}, Final Centroids (sorted): ${sortedCentroids.map(c=>c.centroid.toFixed(2)).join(', ')}`);
+                break;
+
+            case 'rangeNormalization':
+                const thresholds = (Array.isArray(rangeThresholds) && rangeThresholds.length > 0)
+                    ? rangeThresholds
+                    : [0.15, 0.35, 0.65, 0.85]; // Default thresholds for 5 bins
+                if (effectiveBinTags.length !== thresholds.length + 1) throw new Error(`Need ${thresholds.length + 1} tags for ${thresholds.length} thresholds.`);
+                if (ratedImages.length < 2) throw new Error(`Need at least 2 rated images for range normalization.`);
+
+                const scoresRange = ratedImages.map(img => img.rating);
+                const minElo = Math.min(...scoresRange);
+                const maxElo = Math.max(...scoresRange);
+                const range = maxElo - minElo;
+                console.log(`Using Range Normalization: Min=${minElo.toFixed(2)}, Max=${maxElo.toFixed(2)}, Range=${range.toFixed(2)}`);
+
+                ratedImages.forEach(img => {
+                    if (range === 0) { // Handle all scores being identical
+                        imageTags[img.name] = effectiveBinTags[Math.floor(effectiveBinTags.length / 2)]; // Middle tag
+                        return;
+                    }
+                    const normScore = (img.rating - minElo) / range;
+                    let assigned = false;
+                    for(let i = 0; i < thresholds.length; i++) {
+                        if (normScore <= thresholds[i] + 1e-9) { // Add epsilon
+                            imageTags[img.name] = effectiveBinTags[i];
+                            assigned = true;
+                            break;
+                        }
+                    }
+                    if (!assigned) {
+                        imageTags[img.name] = effectiveBinTags[effectiveBinTags.length - 1]; // Assign last tag if above all thresholds
+                    }
+                });
+                break;
+
+            default:
+                throw new Error(`Unknown tagging strategy: ${strategy}`);
         }
+
     } catch (calcError) {
+        console.error(`Calculation error for strategy ${strategy}: ${calcError.message}`);
         return res.status(400).json({ error: `Calculation Error: ${calcError.message}` });
     }
 
-    // Process files...
+    // --- Process Files (Update tags in .txt) ---
     let processedCount = 0;
     let errorCount = 0;
     const tagCounts = {};
@@ -409,12 +480,20 @@ app.post('/api/apply-tags/normal/:subset', async (req, res) => {
     for (const img of ratedImages) {
         const imageName = img.name;
         const assignedTag = imageTags[imageName];
-        const finalTagValue = (strategy === 'ponyQuantile') ? assignedTag : binTags.find(t => t === assignedTag);
 
-        if (!finalTagValue) continue; // Skip if tag assignment failed
+        if (!assignedTag) { // Should not happen if calculation succeeded, but check anyway
+             console.warn(`Internal error: No tag assigned for image ${imageName}, skipping.`);
+             continue;
+        }
+
+        const finalTagValue = effectiveBinTags.includes(assignedTag) ? assignedTag : null; // Verify assigned tag is valid for the *effective* list
+        if (!finalTagValue) {
+            console.warn(`Internal error: Assigned tag "${assignedTag}" not found in effective tags for ${imageName}, skipping.`);
+            continue;
+        }
 
         const fullTag = tagPrefix + finalTagValue;
-        tagCounts[finalTagValue] = (tagCounts[finalTagValue] || 0) + 1;
+        tagCounts[finalTagValue] = (tagCounts[finalTagValue] || 0) + 1; // Count final tag
         const baseName = path.parse(imageName).name;
         const txtFilePath = path.join(subsetPath, `${baseName}.txt`);
 
@@ -433,7 +512,8 @@ app.post('/api/apply-tags/normal/:subset', async (req, res) => {
         }
     }
 
-    const message = `Tagging complete for subset "${subset}" using strategy "${strategyUsed}". Processed: ${processedCount}, Errors: ${errorCount}.`;
+    // --- Send Response ---
+    const message = `Tagging complete for subset "${subset}" using strategy "${effectiveStrategy}". Processed: ${processedCount}, Errors: ${errorCount}.`;
     console.log(message, "Tag counts:", tagCounts);
     res.json({ message, processed: processedCount, errors: errorCount, tagCounts });
 });
@@ -959,23 +1039,136 @@ function getTagFromStdDev(score, mean, stdDev, tags) {
     return tags[Math.floor(tags.length / 2)];
 }
 
-/** Determines tag based on Quantiles */
+/** Determines tag based on Quantiles (Improved) */
 function getTagFromQuantiles(score, sortedScores, tags, quantiles) {
     const total = sortedScores.length;
     if (total === 0) return tags[Math.floor(tags.length / 2)];
-    // Find rank (index) - handle edge cases and duplicates
-    let rank = sortedScores.findIndex(s => s >= score); // Find first score >= current score
-    if (rank === -1) rank = total - 1; // If score is highest, rank is last index
-
-    const percentile = (rank + 1) / total;
-
-    for (let i = 0; i < quantiles.length; i++) {
-        // Use a tiny epsilon for floating point comparisons at boundaries
-        if (percentile <= quantiles[i] + 1e-9) {
-            return tags[i];
-        }
+    let rank = -1;
+    for (let i = total - 1; i >= 0; i--) {
+        if (sortedScores[i] <= score) { rank = i; break; }
     }
-    return tags[tags.length - 1]; // Fallback
+    const percentile = (rank + 1) / total;
+    for (let i = 0; i < quantiles.length; i++) {
+        if (percentile <= quantiles[i] + 1e-9) return tags[i];
+    }
+    return tags[tags.length - 1];
+}
+
+/**
+ * Basic 1D K-Means implementation.
+ * @param {number[]} data - Array of scores.
+ * @param {number} k - Number of clusters.
+ * @param {number} [maxIterations=100] - Max iterations to prevent infinite loops.
+ * @returns {{assignments: number[], centroids: number[]}} - Cluster index for each data point and final centroid values.
+ */
+function kmeans1D(data, k, maxIterations = 100) {
+    if (data.length < k) throw new Error("Cannot have more clusters (k) than data points.");
+
+    // 1. Initialization (simple range spread)
+    const minVal = Math.min(...data);
+    const maxVal = Math.max(...data);
+    let centroids = Array.from({ length: k }, (_, i) => minVal + (maxVal - minVal) * (i / (k - 1 || 1)));
+    if (k === 1) centroids = [(minVal + maxVal) / 2]; // Handle k=1 case
+
+    let assignments = new Array(data.length).fill(-1);
+    let iterations = 0;
+    let changed = true;
+
+    // 2. Iteration
+    while (changed && iterations < maxIterations) {
+        changed = false;
+        iterations++;
+
+        // Assign points to nearest centroid
+        for (let i = 0; i < data.length; i++) {
+            let minDist = Infinity;
+            let bestCluster = -1;
+            for (let j = 0; j < k; j++) {
+                const dist = Math.abs(data[i] - centroids[j]);
+                if (dist < minDist) {
+                    minDist = dist;
+                    bestCluster = j;
+                }
+            }
+            if (assignments[i] !== bestCluster) {
+                assignments[i] = bestCluster;
+                changed = true;
+            }
+        }
+
+        // Recalculate centroids
+        const newCentroids = new Array(k).fill(0);
+        const counts = new Array(k).fill(0);
+        for (let i = 0; i < data.length; i++) {
+            const clusterIndex = assignments[i];
+            newCentroids[clusterIndex] += data[i];
+            counts[clusterIndex]++;
+        }
+
+        for (let j = 0; j < k; j++) {
+            // Handle empty clusters (rare in 1D, but possible with bad init)
+            // Reinitialize centroid if empty, or keep old value
+            if (counts[j] > 0) {
+                newCentroids[j] /= counts[j];
+            } else {
+                console.warn(`K-Means: Cluster ${j} became empty. Reinitializing/keeping old centroid.`);
+                // Option 1: Keep old value
+                newCentroids[j] = centroids[j];
+                // Option 2: Reinitialize randomly (e.g., pick random data point)
+                // newCentroids[j] = data[Math.floor(Math.random() * data.length)];
+            }
+        }
+        centroids = newCentroids;
+    }
+
+    if(iterations === maxIterations) {
+        console.warn("K-Means reached max iterations without full convergence.");
+    }
+
+    return { assignments, centroids };
+}
+
+/** Determines tag based on Quantiles */
+/**
+ * Determines the aesthetic tag based on Elo score using custom quantiles.
+ * IMPROVED: Handles duplicate scores more robustly for percentile calculation.
+ * @param {number} score - The Elo score of the image.
+ * @param {number[]} sortedScores - Array of all Elo scores in the subset, sorted ascending.
+ * @param {string[]} tags - Array of tag names (e.g., ['terrible', 'bad', ...]).
+ * @param {number[]} quantiles - Array of cumulative quantile boundaries (e.g., [0.1, 0.3, 0.7, 0.9, 1.0]).
+ * @returns {string} The determined tag name.
+ */
+function getTagFromQuantiles(score, sortedScores, tags, quantiles) {
+  const total = sortedScores.length;
+  if (total === 0) return tags[Math.floor(tags.length / 2)]; // Default if no scores
+
+  // Find the rank of the LAST item with a score <= the current score.
+  // This handles duplicates correctly for percentile ranking.
+  let rank = -1; // Use index as 0-based rank
+  for (let i = total - 1; i >= 0; i--) {
+      if (sortedScores[i] <= score) {
+          rank = i;
+          break;
+      }
+  }
+  // If score is lower than the lowest sorted score, rank remains -1.
+
+  // Calculate percentile based on the 0-based rank.
+  // (rank + 1) gives the count of items <= score.
+  const percentile = (rank + 1) / total;
+
+  // Determine the bin based on quantile boundaries.
+  // Check if percentile falls AT or BELOW the boundary.
+  for (let i = 0; i < quantiles.length; i++) {
+      // Use a small epsilon for floating point comparisons
+      if (percentile <= quantiles[i] + 1e-9) {
+          return tags[i];
+      }
+  }
+
+  // Should only be reached if something is wrong or percentile > 1.0 (unlikely)
+  console.warn(`Score percentile ${percentile} exceeded max quantile for score ${score}. Assigning last tag.`);
+  return tags[tags.length - 1];
 }
 
 // --- Utility Helpers ---

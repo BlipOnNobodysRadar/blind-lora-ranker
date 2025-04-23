@@ -6,29 +6,44 @@
   <title>Apply Elo Tags</title>
   <link rel="stylesheet" href="styles.css">
   <style>
-    /* (keep the <style> block as before) */
+    /* --- Keep existing styles --- */
     #tagging-controls { margin: 20px auto; padding: 20px; border: 1px solid #ccc; border-radius: 5px; max-width: 700px; background-color: #f9f9f9; }
     #tagging-controls label, #tagging-controls select, #tagging-controls input, #tagging-controls button { margin-right: 10px; margin-bottom: 10px; vertical-align: middle; }
     #tagging-controls fieldset { margin-top: 15px; border: 1px solid #ccc; padding: 15px; margin-bottom: 15px;}
     #tagging-controls legend { font-weight: bold; padding: 0 5px; }
     #tagging-controls .strategy-option { display: block; margin-bottom: 8px; }
     #tagging-controls .inline-input { display: inline-block; margin-left: 5px; }
+    #tagging-controls .tuning-params { /* Style for parameter divs */
+        display: none; /* Hide by default */
+        margin-left: 25px;
+        margin-top: 5px;
+        font-size: 0.9em;
+        padding: 5px;
+        background-color: #eee;
+        border-radius: 3px;
+    }
+     #tagging-controls .tuning-params label { margin-right: 5px; }
+     #tagging-controls .tuning-params input[type="number"],
+     #tagging-controls .tuning-params input[type="text"] { width: auto; margin-bottom: 0; } /* Adjust input size */
+
     #results-area { margin: 20px auto; padding: 15px; border: 1px solid #ccc; border-radius: 5px; max-width: 700px; background-color: #e9e9e9; min-height: 50px; text-align: left; white-space: pre-wrap; font-family: monospace; }
     .processing { font-style: italic; color: blue; }
     .error { color: red; font-weight: bold; }
     .success { color: green; }
+    /* --- Dark Mode Styles --- */
     body.dark-mode #tagging-controls { background-color: #2e2e2e; border-color: #444; }
     body.dark-mode #tagging-controls fieldset { border-color: #444; }
+    body.dark-mode #tagging-controls .tuning-params { background-color: #383838; }
     body.dark-mode #results-area { background-color: #333; border-color: #555; color: #ccc; }
     body.dark-mode .processing { color: lightblue; }
     body.dark-mode .error { color: #ff8a80; }
     body.dark-mode .success { color: #a5d6a7; }
-    #num-bins-container { display: none; }
+
   </style>
 </head>
 <body>
   <!-- (Keep Nav Bar) -->
-   <nav class="navigation">
+  <nav class="navigation">
     <a href="index.html">Rate AI Images</a>
     <a href="index-normal.html">Rate Normal Images</a>
     <a href="rankings.html">AI Image Elo Rankings</a>
@@ -36,18 +51,14 @@
     <a href="lora-rankings.html">LoRA Elo Rankings</a>
     <a href="compare-loras.html">Compare LoRAs</a>
     <a href="tagger.html">Apply Elo Tags</a>
-
     <button onclick="refreshDirectories()" style="margin-left:15px;">Refresh Directories</button>
-
     <label for="darkModeToggle" style="margin-left:15px; cursor:pointer;">
-      <input type="checkbox" id="darkModeToggle" checked>
-      Dark Mode
+      <input type="checkbox" id="darkModeToggle" checked> Dark Mode
     </label>
   </nav>
 
   <h1>Apply Aesthetic Tags Based on Elo</h1>
 
-  <!-- (Keep #tagging-controls div and its contents) -->
   <div id="tagging-controls">
     <div>
         <label for="subset-select">Select Normal Subset:</label>
@@ -58,26 +69,47 @@
 
     <fieldset>
         <legend>Tagging Strategy</legend>
+        <!-- Presets -->
         <label class="strategy-option">
             <input type="radio" name="strategy" value="customQuantile" checked data-tags="terrible,bad,average,good,excellent" data-prefix="aesthetic_rating_">
             Custom Bins (10/20/40/20/10 - 5 Tags)
         </label>
         <label class="strategy-option">
-            <input type="radio" name="strategy" value="ponyQuantile" data-tags="3,4,5,6,7,8,9" data-prefix="score_">
-            Pony Score Bins (Equal 7 Tags)
+            <input type="radio" name="strategy" value="ponyQuantile" data-tags="" data-prefix="quality_"> <!-- Tags fixed backend -->
+            Pony Score Bins (score_3 to score_9 - 7 Tags)
         </label>
-        <label class="strategy-option">
-            <input type="radio" name="strategy" value="equalQuantile">
-            Equal Quantile Bins
-        </label>
-        <div id="num-bins-container" class="inline-input">
-             <label for="num-bins">Number of Bins:</label>
-             <input type="number" id="num-bins" value="5" min="2" max="20" style="width: 50px;">
-        </div>
         <label class="strategy-option">
             <input type="radio" name="strategy" value="stdDev" data-tags="terrible,bad,average,good,excellent" data-prefix="aesthetic_rating_">
             Standard Deviation (5 Tags)
         </label>
+         <!-- Flexible Options -->
+        <label class="strategy-option">
+            <input type="radio" name="strategy" value="equalQuantile">
+            Equal Quantile Bins
+        </label>
+         <div id="num-bins-container" class="tuning-params">
+             <label for="num-bins">Number of Bins:</label>
+             <input type="number" id="num-bins" value="5" min="2" max="20" style="width: 60px;">
+             <small> (Requires matching number of Tag Names below)</small>
+        </div>
+         <label class="strategy-option">
+            <input type="radio" name="strategy" value="kmeans">
+            K-Means Clustering
+        </label>
+        <div id="num-clusters-container" class="tuning-params">
+             <label for="num-clusters">Number of Clusters (K):</label>
+             <input type="number" id="num-clusters" value="5" min="2" max="20" style="width: 60px;">
+             <small> (Requires matching number of Tag Names below)</small>
+        </div>
+         <label class="strategy-option">
+            <input type="radio" name="strategy" value="rangeNormalization">
+            Range Normalization
+        </label>
+         <div id="range-thresholds-container" class="tuning-params">
+             <label for="range-thresholds">Thresholds (0-1, comma-sep):</label>
+             <input type="text" id="range-thresholds" value="0.15, 0.35, 0.65, 0.85" size="30">
+             <small> (N thresholds = N+1 Tag Names below)</small>
+        </div>
     </fieldset>
 
      <fieldset>
@@ -87,21 +119,18 @@
          <br>
          <label for="tag-names">Tag Names (comma-separated):</label>
          <input type="text" id="tag-names" value="terrible,bad,average,good,excellent" size="60">
-         <small> (Required count depends on strategy)</small>
+         <small id="tag-req-msg"> (Required count depends on strategy)</small>
     </fieldset>
-
 
     <button id="apply-tags-btn" style="padding: 8px 15px;">Apply Tags to .txt Files</button>
   </div>
 
-  <!-- (Keep #results-area div) -->
   <div id="results-area">
     Select a subset and click "Apply Tags". Results will appear here. Ensure you have rated images in the selected subset first.
   </div>
 
-  <!-- Link External JS Files -->
   <script src="darkModeScript.js"></script>
-  <script src="tagger.js"></script> <!-- Link the new JS file -->
+  <script src="tagger.js"></script> <!-- Link the external JS file -->
 
 </body>
 </html>
