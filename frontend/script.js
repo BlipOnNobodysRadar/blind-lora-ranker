@@ -990,43 +990,50 @@ function changeSubset() {
 
 
 /**
- * Confirms and initiates deletion of an image.
+ * Confirms before deleting an image.
  */
 function confirmDelete(imageIndex) {
-    // Keep existing confirmDelete logic
-  if (currentPair.length < imageIndex || imageIndex < 1) return;
-
-  const image = currentPair[imageIndex - 1];
-  if (confirm(`Are you sure you want to delete "${image}" from subset "${subset}"? This action cannot be undone.`)) {
-    deleteImage(image);
+    // Ensure currentPair is valid and index is correct
+    if (!currentPair || currentPair.length < imageIndex || imageIndex < 1) {
+        console.error("Cannot delete: Invalid currentPair or imageIndex", currentPair, imageIndex);
+        return;
+    }
+    const image = currentPair[imageIndex - 1];
+    if (!image) {
+         console.error("Cannot delete: Image name not found at index", imageIndex, currentPair);
+        return; // Should not happen if index is valid, but check anyway
+    }
+  
+    if (confirm(`Are you sure you want to delete "${image}" from subset "${subset}"? This action cannot be undone.`)) {
+      // *** PASS imageIndex to deleteImage ***
+      deleteImage(image, imageIndex);
+    }
   }
-}
 
 /**
- * Sends a request to delete an image from the current subset.
+ * Sends a request to delete an image.
+ * @param {string} image - The filename of the image to delete.
+ * @param {number} imageIndex - The index (1 or 2) of the image in the currentPair display.
  */
-function deleteImage(image) {
-    // Keep existing deleteImage logic
+function deleteImage(image, imageIndex) { // *** Add imageIndex as a parameter ***
     if (!subset || !image) return;
 
-  fetch(getApiUrl('image', subset, image), {
+  fetch(getApiUrl('image', subset, image), { // Use getApiUrl correctly
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' }
   })
-    .then(res => {
-         if (!res.ok) {
-             return res.json().then(err => Promise.reject(err));
-         }
-         return res.json();
-     })
+    .then(res => res.ok ? res.json() : res.json().then(err => Promise.reject(err)))
     .then(data => {
         alert(`Image "${image}" deleted. ${data.deletedFile ? '(File also removed)' : '(File removal failed or skipped)'}`);
 
-        // Detach listener from the specific image element if it exists
+        // *** Now imageIndex is defined and can be used ***
         const imgElementId = imageIndex === 1 ? 'image1' : 'image2';
         const imgElement = document.getElementById(imgElementId);
         if (imgElement) {
+            console.log(`Detaching zoom listener from #${imgElementId}`); // Debug log
             detachZoomListeners(imgElement);
+        } else {
+            console.warn(`Could not find element #${imgElementId} to detach listener.`); // Warn if element not found
         }
 
         currentPair = []; // Reset pair state
@@ -1036,7 +1043,7 @@ function deleteImage(image) {
     .catch(err => {
         console.error(`Error deleting ${subsetType} image:`, err);
         alert(`Error deleting image: ${err.message || err.error || 'Unknown error'}`);
-        // Still try to fetch a new match even if delete failed? Or just update progress?
+        // Attempt to recover by fetching next match
         fetchMatch();
         fetchProgress();
     });

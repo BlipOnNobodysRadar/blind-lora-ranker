@@ -2,6 +2,7 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const fs = require('fs');
+const fsPromises = require('fs').promises;
 const path = require('path');
 const pngMetadata = require('png-metadata');
 
@@ -54,6 +55,175 @@ function shuffleArray(array) {
     [array[i], array[j]] = [array[j], array[i]]; // Swap elements
   }
 }
+
+
+/**
+ * Determines the aesthetic tag based on Elo score using custom quantiles.
+ * @param {number} score - The Elo score of the image.
+ * @param {number[]} sortedScores - Array of all Elo scores in the subset, sorted ascending.
+ * @param {string[]} tags - Array of tag names (e.g., ['terrible', 'bad', ...]).
+ * @param {number[]} quantiles - Array of cumulative quantile boundaries (e.g., [0.1, 0.3, 0.7, 0.9, 1.0]).
+ * @returns {string} The determined tag name.
+ */
+function getTagFromQuantiles(score, sortedScores, tags, quantiles) {
+  const totalImages = sortedScores.length;
+  if (totalImages === 0) return tags[Math.floor(tags.length / 2)]; // Default to middle tag if no scores
+
+  // Find the rank (position) of the score in the sorted list
+  // Handle potential duplicate scores by finding the last occurrence's rank
+  let rank = -1;
+  for(let i = sortedScores.length - 1; i >= 0; i--) {
+      if (sortedScores[i] <= score) {
+           // Rank is position + 1, percentile is rank / total
+           // Use index directly for boundary checks for simplicity here
+          rank = i;
+          break;
+      }
+  }
+   // If score is lower than the lowest, rank is effectively -1, handle below
+
+  const percentile = (rank + 1) / totalImages; // Calculate percentile (0 to 1)
+
+  // Determine the bin based on quantile boundaries
+  for (let i = 0; i < quantiles.length; i++) {
+      if (percentile <= quantiles[i]) {
+          return tags[i];
+      }
+  }
+
+  // Should not be reached if quantiles[last] === 1.0, but return last tag as fallback
+  return tags[tags.length - 1];
+}
+
+/**
+* Applies aesthetic tags to TXT files based on Elo ratings for a normal subset.
+*/
+app.post('/api/apply-tags/normal/:subset', async (req, res) => {
+  const subset = req.params.subset;
+  const {
+      // Allow passing config in the future, default to user's request for now
+      tagPrefix = 'aesthetic_rating_',
+      strategy = 'customQuantile', // Example strategies: 'customQuantile', 'equalQuantile', 'stdDev'
+      // Define user's custom quantile setup
+      binTags = ['terrible', 'bad', 'average', 'good', 'excellent'],
+      binQuantiles = [0.1, 0.3, 0.7, 0.9, 1.0] // Cumulative: 10%, next 20% (->30%), next 40% (->70%), next 20% (->90%), top 10% (->100%)
+  } = req.body; // Get config from request body
+
+  console.log(`Received request to apply tags for normal subset: ${subset} using strategy: ${strategy}`);
+
+  if (!normalSubsets[subset]) {
+      return res.status(404).json({ error: 'Normal subset not found' });
+  }
+
+  const { images } = normalSubsets[subset];
+  const ratedImages = Object.entries(images)
+                            .filter(([_, data]) => data.rating !== null)
+                            .map(([name, data]) => ({ name, rating: data.rating }));
+
+  if (ratedImages.length < binTags.length) { // Need at least as many images as bins for quantiles
+      return res.status(400).json({ error: `Not enough rated images (${ratedImages.length}) in subset to apply ${binTags.length} tags.` });
+  }
+
+  // --- Apply Binning Strategy ---
+  let imageTags = {}; // { imageName: 'tag_name', ... }
+
+  if (strategy === 'customQuantile' || strategy === 'equalQuantile') { // Handle both quantile types
+      ratedImages.sort((a, b) => a.rating - b.rating); // Sort by Elo ascending
+      const sortedScores = ratedImages.map(img => img.rating);
+      let currentQuantiles = binQuantiles; // Default to custom
+
+      if(strategy === 'equalQuantile') {
+          // Calculate equal quantile boundaries
+          const numBins = binTags.length;
+          currentQuantiles = [];
+          for (let i = 1; i <= numBins; i++) {
+               currentQuantiles.push(i / numBins);
+          }
+          console.log(`Using equal quantiles: ${currentQuantiles}`);
+      } else {
+           console.log(`Using custom quantiles: ${currentQuantiles}`);
+      }
+
+
+      ratedImages.forEach(img => {
+          imageTags[img.name] = getTagFromQuantiles(img.rating, sortedScores, binTags, currentQuantiles);
+      });
+
+  } else if (strategy === 'stdDev') {
+      // TODO: Implement Standard Deviation binning if needed
+      return res.status(501).json({ error: 'Standard Deviation tagging not implemented yet.' });
+  } else {
+      return res.status(400).json({ error: `Unknown tagging strategy: ${strategy}` });
+  }
+
+  // --- Process Files ---
+  let processedCount = 0;
+  let errorCount = 0;
+  const tagCounts = binTags.reduce((acc, tag) => ({ ...acc, [tag]: 0 }), {}); // Initialize counts
+
+  const subsetPath = path.join(NORMAL_IMAGES_DIR, subset);
+
+  // Process files sequentially to avoid overwhelming the system
+  for (const img of ratedImages) {
+      const imageName = img.name;
+      const assignedTag = imageTags[imageName]; // e.g., 'average'
+      const fullTag = tagPrefix + assignedTag; // e.g., 'aesthetic_rating_average'
+
+      if (!assignedTag) {
+          console.warn(`No tag assigned for image ${imageName}, skipping.`);
+          continue;
+      }
+
+      tagCounts[assignedTag]++; // Count the assigned tag type
+
+      const baseName = path.parse(imageName).name;
+      const txtFilePath = path.join(subsetPath, `${baseName}.txt`);
+
+      try {
+          let currentContent = '';
+          try {
+              currentContent = await fsPromises.readFile(txtFilePath, 'utf8');
+          } catch (readError) {
+              if (readError.code === 'ENOENT') {
+                  console.log(`Creating new caption file: ${txtFilePath}`);
+                  currentContent = ''; // File doesn't exist, start fresh
+              } else {
+                  throw readError; // Rethrow other read errors
+              }
+          }
+
+          // Split into tags, trim whitespace, filter out old tags and empty strings
+          let tags = currentContent.split(',')
+                                .map(t => t.trim())
+                                .filter(t => t && !t.startsWith(tagPrefix));
+
+          // Add the new tag
+          tags.push(fullTag);
+
+          // Join back together
+          const newContent = tags.join(', ');
+
+          // Write the updated content back
+          await fsPromises.writeFile(txtFilePath, newContent, 'utf8');
+          processedCount++;
+
+      } catch (err) {
+          console.error(`Error processing file for ${imageName} (${txtFilePath}):`, err);
+          errorCount++;
+      }
+  }
+
+  // --- Send Response ---
+  const message = `Tagging complete for subset "${subset}". Processed: ${processedCount}, Errors: ${errorCount}.`;
+  console.log(message, "Tag counts:", tagCounts);
+  res.json({
+      message: message,
+      processed: processedCount,
+      errors: errorCount,
+      tagCounts: tagCounts
+  });
+});
+
 
 /**
  * Loads all subsets from the AI_IMAGES_DIR (i.e. LoRA images).
