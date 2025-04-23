@@ -118,24 +118,55 @@
     }
 
     function renderRankings() {
-      sortRankings();
+      sortRankings(); // Assumes this function exists
       const container = document.getElementById('ranking-container');
+      const header = document.getElementById('ranking-header'); // Get header too
+      if (!container || !header) return; // Check elements exist
+
       container.innerHTML = '';
-      const searchTerm = (document.getElementById('search').value || '').toLowerCase();
+      const searchTerm = (document.getElementById('search')?.value || '').toLowerCase();
+
+      // --- Update Header Display ---
+      // Show/Hide Matches header based on context (Image vs LoRA)
+      const matchesHeader = header.querySelector('span[data-sort="matches"]');
+      if(matchesHeader) {
+          // Assuming image rankings pages have img tags inside items
+          const isImageRanking = container.querySelector('.ranking-item img') !== null || rankingsData.some(item => item.image); // Check data too just in case
+          // Technically, this check should ideally happen *before* clearing the container,
+          // but checking the data source (rankingsData) might be more reliable.
+          // For simplicity, let's assume rankingsData tells us if it's image or LoRA based on structure.
+          // Modify this check based on your actual data structure if needed.
+          const hasImageThumbnails = true; // Assume these pages ALWAYS have thumbnails
+          matchesHeader.style.display = hasImageThumbnails ? 'none' : 'inline-block'; // Hide if image page
+      }
+
 
       rankingsData
-        .filter(item => item.image.toLowerCase().includes(searchTerm))
+        .filter(item => item.image.toLowerCase().includes(searchTerm)) // Assuming 'image' field exists
         .forEach(item => {
           const div = document.createElement('div');
           div.className = 'ranking-item';
+
+          // Determine image source based on page type (AI vs Normal)
+          const imageBaseUrl = window.location.pathname.includes('rankings-normal.html')
+                              ? 'normal-images'
+                              : 'images';
+
+          // **** WRAP Name and Matches in a div ****
           div.innerHTML = `
-            <img src="normal-images/${currentSubset}/${item.image}" alt="${item.image}">
-            <span>${item.image} (Matches: ${item.matches})</span>
-            <span>Rating: ${item.rating.toFixed(2)}</span>
+            <img src="${imageBaseUrl}/${currentSubset}/${item.image}" alt="${item.image}">
+            <div class="item-details">
+                <span>${item.image}</span>
+                <span>(Matches: ${item.matches ?? 0})</span>
+            </div>
+            <span>${item.rating?.toFixed(2) ?? 'N/A'}</span>
           `;
+          // **** END WRAP ****
+
           container.appendChild(div);
         });
     }
+
 
     function sortRankings() {
       rankingsData.sort((a, b) => {

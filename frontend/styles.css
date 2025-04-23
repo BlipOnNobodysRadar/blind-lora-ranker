@@ -1,33 +1,48 @@
-/* ------------------------------------------------------------------
-   1. Base Reset & Body
------------------------------------------------------------------- */
+/* frontend/styles.css - Consolidated & Cleaned */
+
+/* ==================================================================
+   1. Base & Body Styles
+================================================================== */
 body {
   margin: 0;
   padding: 0;
   font-family: Arial, sans-serif;
   text-align: center;
   box-sizing: border-box;
-  background: #f2f2f2; /* Slightly darker than white, for normal mode */
-  color: #333;
-  max-width: 100vw; /* Prevent horizontal scrolling if content overflows */
-  padding-bottom: 40px; /* Add padding at the very bottom of the page */
-  overflow-x:hidden;
+  background: #f2f2f2; /* Light mode background */
+  color: #333;       /* Light mode text */
+  max-width: 100vw;
+  padding-bottom: 40px;
+  overflow-x: hidden; /* Prevent horizontal scroll on body */
 }
 
-/* ------------------------------------------------------------------
+/* Apply box-sizing globally */
+*, *::before, *::after {
+  box-sizing: inherit;
+}
+
+/* ==================================================================
    2. Navigation Bar
------------------------------------------------------------------- */
+================================================================== */
 .navigation {
   display: flex;
   justify-content: center;
   align-items: center;
   flex-wrap: wrap;
+  padding: 8px 15px; /* Add some padding */
   background: #e0e0e0;
-  margin: 0; /* Ensure no gap at the very top */
+  margin-bottom: 15px; /* Space below nav */
+}
+
+.navigation a,
+.navigation button,
+.navigation label,
+.navigation select {
+  margin: 5px 10px; /* Consistent margin */
+  vertical-align: middle; /* Align items better */
 }
 
 .navigation a {
-  margin: 5px 15px;
   font-weight: bold;
   text-decoration: none;
   color: #007acc;
@@ -37,26 +52,28 @@ body {
 }
 
 .navigation button {
-  margin-left: 15px;
   padding: 6px 12px;
   background-color: #007acc;
   color: #fff;
   border: none;
   border-radius: 4px;
   cursor: pointer;
+  font-size: 0.9em;
 }
 .navigation button:hover {
   background-color: #005a99;
 }
 
 .navigation label {
-  margin-left: 15px;
   cursor: pointer;
-  color: #333; /* Will override in dark mode */
+  color: #333;
+}
+.navigation label input[type="checkbox"] {
+    vertical-align: middle; /* Align checkbox with text */
+    margin-right: 4px;
 }
 
 .navigation select {
-  margin-left: 8px;
   padding: 6px;
   background-color: #fff;
   border: 1px solid #ccc;
@@ -68,53 +85,113 @@ body {
   border-color: #007acc;
 }
 
-/* ------------------------------------------------------------------
-   3. Progress Bar & Thresholds
------------------------------------------------------------------- */
+/* ==================================================================
+   3. Headings & General Text
+================================================================== */
+h1 {
+    margin-top: 20px;
+    margin-bottom: 20px;
+    font-size: 1.8em;
+    color: #333;
+}
+
+p {
+    line-height: 1.5;
+}
+
+/* ==================================================================
+   4. Controls (Search, Filters, Buttons)
+================================================================== */
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center; /* Center controls */
+  align-items: center;
+  width: 90%;
+  max-width: 900px; /* Reasonable max width */
+  margin: 20px auto;
+  padding: 10px;
+  gap: 15px; /* Space between control groups */
+  background-color: #f9f9f9;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+}
+
+.controls div { /* Basic grouping */
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.controls label {
+    font-weight: bold;
+    margin-right: 5px;
+}
+
+.controls input[type="text"],
+.controls select {
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.95em;
+}
+.controls input[type="text"] {
+  width: 220px; /* Slightly wider search */
+}
+.controls select {
+    cursor: pointer;
+}
+.controls select[multiple] {
+    min-height: 80px; /* Taller multi-select */
+}
+
+.controls button {
+  padding: 7px 12px;
+  border: none;
+  background: #007acc;
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.95em;
+}
+.controls button:hover {
+  background: #005a99;
+}
+
+/* ==================================================================
+   5. Progress Bar (Rating Pages)
+================================================================== */
 .progress-container {
   position: relative;
   width: 80%;
-  max-width: 600px;
+  max-width: 700px; /* Wider progress bar */
   height: 20px;
   background: #eee;
-  margin: 10px auto;
+  margin: 20px auto; /* More vertical margin */
   border-radius: 5px;
   overflow: hidden;
   border: 1px solid #ccc;
 }
 
-/* Main progress bar that will show total width */
 .progress-bar {
   position: absolute;
   top: 0;
   left: 0;
   height: 100%;
-  width: 0;
-  transition: width 0.5s, background 0.5s;
-  /* Add a purple right edge using a linear gradient */
-  background-image: linear-gradient(to right, 
-    transparent, 
-    transparent 96%, 
-    rgba(128, 0, 128, 1) 96%, 
-    rgba(128, 0, 128, 1) 100%
-  );
+  width: 0%; /* Start at 0 */
+  transition: width 0.5s ease-out, background-color 0.5s ease-out; /* Smooth transitions */
+  z-index: 1;
+  /* Gradient for purple edge (dynamically set background in JS) */
   background-size: 100% 100%;
-  /* The base background color will be set by JavaScript */
-  z-index: 1; /* Above sections but below label */
 }
 
-/* Section labels inside the progress bar */
-.section-labels {
+.section-labels { /* Container for colored sections */
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  inset: 0;
   display: flex;
   pointer-events: none;
 }
-
-.section-label {
+.section-label { /* Individual colored section */
   height: 100%;
   display: flex;
   justify-content: center;
@@ -126,135 +203,110 @@ body {
   overflow: hidden;
   white-space: nowrap;
 }
+.section-not-reliable { width: 25%; background-color: rgba(204, 41, 41, 0.9); }
+.section-minimum { width: 25%; background-color: rgba(204, 97, 0, 0.9); }
+.section-decent { width: 50%; background-color: rgba(204, 165, 0, 0.9); }
+/* section-good is applied via JS class on container */
 
-.section-not-reliable {
-  width: 25%; /* 0-5/20 = 0-25% */
-  background-color: rgba(204, 41, 41, 0.9); /* Darker red */
-}
-
-.section-minimum {
-  width: 25%; /* 5-10/20 = 25-50% */
-  background-color: rgba(204, 97, 0, 0.9); /* Darker orange */
-}
-
-.section-decent {
-  width: 50%; /* 10-20/20 = 50-100% */
-  background-color: rgba(204, 165, 0, 0.9); /* Darker yellow */
-}
-
-.section-good {
-  /* This section is absolute positioned to avoid affecting layout */
+.progress-label { /* Text overlay (e.g., 5/20) */
   position: absolute;
-  top: 0;
-  right: 0;
-  height: 100%;
-  width: 25%; /* Fixed width */
-  background-color: rgba(61, 140, 64, 0.9); /* Darker green */
-  display: none; /* Hidden by default, shown via JS */
-}
-
-.progress-label {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
+  inset: 0;
   display: flex;
   justify-content: center;
   align-items: center;
   font-weight: bold;
-  pointer-events: none;
   color: #333;
   text-shadow: 0px 0px 2px rgba(255, 255, 255, 0.7);
-  z-index: 2; /* Place on top of section labels */
+  z-index: 2;
+  pointer-events: none;
 }
 
-.threshold {
+.threshold { /* Vertical tick marks */
   position: absolute;
   top: 0;
   width: 2px;
   height: 100%;
   background: black;
-  z-index: 3; /* Place on top of everything */
+  z-index: 3;
 }
-.threshold-label {
+.threshold-label { /* Text below tick marks */
   position: absolute;
   top: 100%;
+  left: 50%; /* Center relative to tick */
   transform: translateX(-50%);
-  font-size: 12px;
+  margin-top: 2px;
+  font-size: 11px;
   white-space: nowrap;
+  color: #555;
 }
-.threshold-minimum { left: 25%; } /* 5/20 = 25% */
-.threshold-decent  { left: 50%; } /* 10/20 = 50% */
-.threshold-good    { left: 100%; }/* 20/20 = 100% */
+.threshold-minimum { left: 25%; }
+.threshold-decent  { left: 50%; }
+.threshold-good    { left: 100%; }
 
-/* ------------------------------------------------------------------
-   4. Image Container & Wrappers
------------------------------------------------------------------- */
+/* ==================================================================
+   6. Image Display (Rating & Seeding)
+================================================================== */
+
+/* Container for image pairs (rating) or gallery (seeding) */
 .image-container {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin: 10px auto;
-  padding: 20px;
+  gap: 15px; /* Gap between items */
+  margin: 20px auto;
+  padding: 15px;
   background: #eaeaea;
   border-radius: 5px;
-  max-width: 95vw;      /* Fill most of screen width, no strict px limit */
-  justify-content: space-around;
-  align-items: stretch;
-  /* max-height:83vh; */
+  max-width: 95vw;
+  justify-content: space-around; /* Distribute space */
+  align-items: stretch; /* Stretch wrappers vertically */
 }
 
+/* Wrapper for a single image + controls/info */
 .image-wrapper {
-  flex: 0 1 48%;        /* Two images side-by-side on larger screens */
+  flex: 1 1 45%; /* Aim for 2 columns, allow shrinking/growing */
+  min-width: 300px; /* Minimum width before wrapping */
+  max-width: 48%; /* Prevent growing too large on wide screens */
   display: flex;
   flex-direction: column;
   align-items: center;
   background: #fff;
   border: 1px solid #ccc;
-  padding: 7px;
+  padding: 10px; /* More padding */
   border-radius: 5px;
   box-sizing: border-box;
-  overflow: hidden; /* Crucial to clip the zoomed image */
-  position: relative; /* Needed for potential absolute positioning or z-index */
-  max-height: 83vh;
-  position:relative;
+  overflow: hidden; /* Clip zoomed image */
+  position: relative;
 }
 
-/* --- GENERALIZED Image Style (for hover base) --- */
-/* Apply base styles needed for zoom to ALL relevant images */
+/* Rating Page Specific: Limit height */
+#head-to-head-ui .image-wrapper {
+    max-height: 85vh; /* Limit height on rating page */
+}
+
+/* Base Image Styling (for zoom, etc.) */
 .image-wrapper img {
-  /* ... existing styles ... */
-  max-height: 95%; /* Keep max-height for head-to-head */
+  display: block;
   max-width: 100%;
-  transform: scale(1);
-  display: block; /* Prevents extra space below image */
-  cursor: crosshair; /* Indicate zoom interaction */
-  transform-origin: center center; /* Default origin */
-  transform: scale(1); /* Start at normal size */
-  transition: transform 0.15s ease-out; /* Smooth transition for scale */
-  will-change: transform; /* Hint for browser optimization */
-  pointer-events: auto;
-}
-
-/* Style when zoom is active (class added by JS) */
-.image-wrapper img.zooming {
-  /* No specific style needed here now, scale is set via inline style */
-}
-
-.image-wrapper:hover img {
-  z-index: 10; /* Bring hovered image's wrapper content forward */
-}
-
-/* If "Scale Images" toggle is ON, fill container (even if it upscales) */
-body.scale-images .image-wrapper img {
-  width: 100%;
-  max-width: 100%;
+  max-height: 90%; /* Limit image height within wrapper */
   height: auto;
-  object-fit: contain;
+  object-fit: contain; /* Scale image nicely */
+  cursor: crosshair;
+  transform-origin: center center;
+  transform: scale(1);
+  transition: transform 0.15s ease-out;
+  will-change: transform;
+  pointer-events: auto;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+}
+/* Rating Page Specific: Image takes more height */
+#head-to-head-ui .image-wrapper img {
+    max-height: calc(100% - 45px); /* Fill available height minus button space */
 }
 
-.image-wrapper button {
+
+/* Delete button (Rating pages) */
+#head-to-head-ui .image-wrapper button {
   margin-top: 10px;
   padding: 6px 12px;
   background: #c00;
@@ -262,671 +314,421 @@ body.scale-images .image-wrapper img {
   border: none;
   border-radius: 3px;
   cursor: pointer;
-}
-.image-wrapper button:hover {
-  background: #900;
-}
-
-/* ------------------------------------------------------------------
-   5. Ranking & Summary Containers
------------------------------------------------------------------- */
-/* Widen the main container for rankings */
-.ranking-container {
-  display: flex; /* Keep flex for column layout of items */
-  flex-direction: column; /* Stack items vertically */
-  align-items: center; /* Center items horizontally IF they don't take full width */
-  width: 90%; /* Adjust width as desired */
-  max-width: 1100px; /* Adjust max-width as desired */
-  margin: 10px auto 20px auto; /* Center horizontally, add vertical margin */
-}
-
-/* Style individual LoRA ranking items using CSS Grid */
-.ranking-item {
-  display: grid;
-  width: 100%; /* Make items take full width of the container */
-  grid-template-columns: 1fr auto auto;
-  grid-template-rows: auto auto;
-  grid-template-areas:
-    "name   rating  matches"
-    "prog   prog    prog";
-  gap: 4px 15px;
-  align-items: center;
-  margin: 4px 0;
-  padding: 12px 15px;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.05);
-  box-sizing: border-box; /* Include padding/border in width */
-}
-
-/* ... (Keep span:nth-of-type(1) styling) ... */
-.ranking-item span:nth-of-type(1) { /* LoRA Name Span */
-  grid-area: name;
-  text-align: left;
-  font-weight: bold;
-  word-break: break-all;
-  overflow-wrap: break-word;
-  line-height: 1.3;
-}
-.ranking-item span:nth-of-type(1) strong {
-    font-weight: 600;
-}
-
-
-.ranking-item span:nth-of-type(2) { /* Rating Span */
-  grid-area: rating;
-  text-align: right;
-  white-space: nowrap;
-  font-size: 0.95em;
-  color: #333; /* Default color */
-}
-
-.ranking-item span:nth-of-type(3) { /* Matches Span */
-  grid-area: matches;
-  text-align: right;
-  white-space: nowrap;
-  font-size: 0.95em;
-  color: #555; /* Default color */
-}
-
-/* ... (Keep progress bar styling) ... */
-.ranking-item .progress-bar-container {
-  grid-area: prog;
-  width: 100%;
-  margin-top: 8px;
-  position: relative;
-  height: 10px;
-  overflow: hidden;
-  border: 1px solid #ccc;
-  background: #f3f3f3;
-  border-radius: 3px;
-}
-.ranking-item .progress-bar-container .progress-bar-background {
-    position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #e0e0e0;
-}
-.ranking-item .progress-bar-container .progress-bar {
-    position: absolute; top: 0; left: 0; height: 100%; background: #4caf50; transition: width 0.3s ease;
-}
-
-
-/* Summary box */
-.summary {
-  width: 90%; /* Match container width */
-  max-width: 1100px; /* Match container max-width */
-  margin: 20px auto; /* Center horizontally */
-  padding: 15px;
-  background: #f9f9f9;
-  border: 1px solid #ccc;
-  border-radius: 5px;
-  text-align: left;
-}
-
-/* ------------------------------------------------------------------
-   6. Controls
------------------------------------------------------------------- */
-.controls {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  align-items: center;
-  width: 90%;
-  max-width: 800px;
-  margin: 10px auto;
-  gap: 10px;
-}
-
-.controls input[type="text"] {
-  width: 200px;
-  padding: 5px;
-  border: 1px solid #ddd;
-  border-radius: 3px;
-}
-
-.controls button {
-  padding: 5px 10px;
-  border: 1px solid #007acc;
-  background: #007acc;
-  color: #fff;
-  border-radius: 3px;
-  cursor: pointer;
-}
-.controls button:hover {
-  background: #005a99;
-  border-color: #005a99;
-}
-
-/* ------------------------------------------------------------------
-   7. Ranking Headers
------------------------------------------------------------------- */
-.ranking-header {
-  display: flex;
-  justify-content: space-between; /* Distribute space */
-  width: 90%; /* Match container width */
-  max-width: 1100px; /* Match container max-width */
-  margin: 15px auto 5px auto; /* Center horizontally, adjust vertical margin */
-  padding: 0 15px; /* Add padding to align roughly with item content */
-  box-sizing: border-box; /* Include padding in width */
-  cursor: pointer;
-  border-bottom: 2px solid #ccc; /* Add separator */
-  padding-bottom: 5px;
-}
-.ranking-header span {
-  /* Adjust flex basis for better alignment with grid columns */
-  flex: 1 1 auto; /* Allow flexible shrinking/growing for name */
-  text-align: left; /* Align header text left by default */
-  font-weight: bold;
-  padding: 5px 0;
-}
-/* Target specific headers for right alignment */
-.ranking-header span[data-sort="rating"],
-.ranking-header span[data-sort="matches"] {
-  flex: 0 1 100px; /* Give fixed basis, allow shrinking */
-  text-align: right; /* Align these headers right */
-  margin-left: 15px; /* Add space from the name column */
-}
-
-.ranking-header span.sort-asc::after { content: " ▲"; font-size: 0.8em; }
-.ranking-header span.sort-desc::after { content: " ▼"; font-size: 0.8em; }
-
-
-/* ------------------------------------------------------------------
-   8. Tables & Compare LoRA
------------------------------------------------------------------- */
-.table-container {
-  display: block; /* Ensure it's a block-level element */
-  margin-left: auto;  /* Explicitly set left margin to auto */
-  margin-right: auto; /* Explicitly set right margin to auto */
-  margin-top: 20px;     /* Add top margin */
-  margin-bottom: 20px;  /* Add bottom margin */
-  max-width: 95vw;      /* Slightly wider max-width? Adjust as needed */
-  overflow-x: auto;     /* Allow horizontal scrolling for the table inside */
-  box-sizing: border-box; /* Good practice */
-}
-
-#comparison-table {
-  margin: auto;
-}
-
-table {
-  width: 90%;
-  min-width: 800px;
-  border-collapse: collapse;
-  background: #fff;
-}
-th, td {
-  border: 1px solid #ddd;
-  padding: 8px;
-  text-align: center;
-}
-th {
-  cursor: pointer;
-  background-color: #f3f3f3;
-}
-th.sort-asc::after {
-  content: " ▲";
-}
-th.sort-desc::after {
-  content: " ▼";
-}
-
-.highlight-diff-positive {
-  background-color: #e0ffe0;
-}
-.highlight-diff-negative {
-  background-color: #ffe0e0;
-}
-
-
-/* NEW: Styling for LoRA Name column in compare-loras.html table */
-/* Apply to both header and data cells for consistent width calculation */
-#comparison-table th.lora-name-cell,
-#comparison-table td.lora-name-cell {
-  max-width: 300px; /* Adjust max width as needed */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: left; /* Ensure LoRA names align left */
-}
-
-/* Ensure the header text itself aligns left */
-#comparison-table th.lora-name-cell {
-    text-align: left;
-}
-
-
-/* Keep existing highlight classes for light mode */
-.highlight-diff-positive {
-  background-color: #e0ffe0; /* Light green */
-}
-.highlight-diff-negative {
-  background-color: #ffe0e0; /* Light red */
-}
-
-
-/* ------------------------------------------------------------------
-   9. Notifications
------------------------------------------------------------------- */
-.notification {
-  display: none;
-  width: 80%;
-  max-width: 600px;
-  margin: 20px auto;
-  padding: 10px;
-  background-color: #fffae6;
-  border: 1px solid #ffd700;
-  border-radius: 4px;
-}
-
-/* ------------------------------------------------------------------
-   10. Progress Bar Container (LoRA Rankings)
------------------------------------------------------------------- */
-.progress-bar-container {
-  position: relative;
-  width: 100%;
-  height: 25px;
-  overflow: hidden;
-  margin-top: 5px;
-  border: 1px solid #ccc;
-  background: #f3f3f3;
-  border-radius: 5px;
-}
-.progress-bar-background {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background: #e0e0e0;
-}
-.progress-bar {
-  position: absolute;
-  top: 0;
-  left: 0;
-  height: 100%;
-  background: #4caf50;
-}
-
-/* ------------------------------------------------------------------
-   11. Dark Mode Overrides
------------------------------------------------------------------- */
-body.dark-mode {
-  background-color: #121212;
-  color: #ccc;
-}
-
-/* Darken navigation in dark mode */
-body.dark-mode .navigation {
-  background-color: #333;
-}
-
-/* Darken nav links */
-body.dark-mode .navigation a {
-  color: #ccc;
-}
-body.dark-mode .navigation a:hover {
-  text-decoration: underline;
-}
-
-/* Dark mode for the refresh button */
-body.dark-mode .navigation button {
-  background-color: #555;
-  color: #ccc;
-}
-body.dark-mode .navigation button:hover {
-  background-color: #777;
-}
-
-/* Dark mode for subset dropdowns */
-body.dark-mode .navigation select {
-  background-color: #555;
-  color: #ccc;
-  border: 1px solid #444;
-}
-
-/* Dark mode label text for the normal-subset-select or others */
-body.dark-mode label[for="normal-subset-select"] {
-  color: #ccc;
-}
-
-/* Dark mode label text for darkModeToggle specifically */
-body.dark-mode label[for="darkModeToggle"] {
-  color: #fff;
-}
-
-/* Dark mode for the image container */
-body.dark-mode .image-container {
-  background: #1e1e1e;
-}
-
-/* Dark mode for image wrappers */
-body.dark-mode .image-wrapper {
-  background: #2e2e2e;
-  border: 1px solid #444;
-}
-body.dark-mode .image-wrapper img {
-  border-color: #555;
-}
-body.dark-mode .image-wrapper button {
-  background: #900;
-}
-
-/* Dark mode for ranking items */
-body.dark-mode .ranking-item {
-  background: #2e2e2e;
-  border: 1px solid #444;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-}
-
-body.dark-mode .ranking-item span:nth-of-type(1) { /* Name */
-  color: #ddd;
-}
-body.dark-mode .ranking-item span:nth-of-type(1) strong {
-    color: #eee;
-}
-
-/* -->> IMPROVED DARK MODE CONTRAST <<-- */
-body.dark-mode .ranking-item span:nth-of-type(2) { /* Rating */
-  color: #ccc; /* Lighter gray */
-}
-body.dark-mode .ranking-item span:nth-of-type(3) { /* Matches */
-  color: #bbb; /* Lighter gray */
-}
-
-body.dark-mode .ranking-item .progress-bar-container {
-  border: 1px solid #555;
-  background: #444;
-}
-body.dark-mode .ranking-item .progress-bar-container .progress-bar-background {
-    background: #555;
-}
-body.dark-mode .ranking-item .progress-bar-container .progress-bar {
-    background: #388e3c; /* Slightly darker green */
-}
-
-body.dark-mode .ranking-header {
-  border-bottom-color: #555; /* Darker border */
-}
-body.dark-mode .ranking-header span {
-  color: #ccc; /* Lighter header text */
-}
-
-
-/* Dark mode for tables */
-body.dark-mode table {
-  background-color: #1e1e1e;
-}
-body.dark-mode th {
-  background-color: #333;
-  color: #ccc;
-}
-body.dark-mode td {
-  color: #ccc;
-}
-/* NEW: Dark mode overrides for comparison table highlights */
-body.dark-mode .highlight-diff-positive {
-  background-color: #1a4d2e; /* Darker green background */
-  color: #a5d6a7; /* Lighter green text */
-}
-body.dark-mode .highlight-diff-negative {
-  background-color: #5a1a1a; /* Darker red/maroon background */
-  color: #ff8a80; /* Lighter red text */
-}
-
-/* Ensure LoRA name cell has good contrast in dark mode */
-body.dark-mode #comparison-table td.lora-name-cell {
-    color: #ddd; /* Adjust if needed based on your dark mode text color */
-}
-
-
-/* Dark mode for summary, notifications, etc. */
-body.dark-mode .summary {
-  background: #2e2e2e;
-  border: 1px solid #444;
-}
-body.dark-mode .notification {
-  background-color: #333;
-  border-color: #666;
-  color: #ccc;
-}
-
-/* ---------------------
-Star rating section 
-------------------------*/
-/* frontend/styles.css */
-
-/* ... (previous styles remain) ... */
-
-/* Add this section or modify the existing one */
-/* Seeding Gallery Styles */
-
-/* Override .image-container for the gallery view */
-#seeding-gallery #image-seeding-cards.image-container {
-  flex-direction: row; /* Arrange images in rows */
-  justify-content: center;
-  align-items: flex-start; /* Align items to the top */
-  gap: 20px;
-  padding: 20px;
-  background: none;
-  border: none;
-  max-width: 100vw;
-  box-sizing: border-box;
-  height: auto; /* Let height be determined by content */
-  margin: 10px auto; /* Use standard margin like other containers */
-}
-
-/* Style individual image cards in the seeding gallery */
-#seeding-gallery #image-seeding-cards .image-wrapper {
- /* Removed fixed flex-basis/width to allow more flexibility */
- flex: 1 1 30%; /* Allow growth (1), shrinking (1), minimum width (250px) */
- max-width: 45%; /* Maximum width per card */
- flex-direction: column; /* Stack image, name, stars */
- align-items: center;
- background: #fff; /* White background for cards */
- border: 1px solid #ccc;
- padding: 10px;
- border-radius: 5px;
- box-sizing: border-box;
- text-align: center;
- overflow: hidden;
- height: auto;
-}
-
-body.dark-mode #seeding-gallery #image-seeding-cards .image-wrapper {
- background: #2e2e2e; /* Dark mode background */
- border: 1px solid #444;
-}
-
-
-#seeding-gallery #image-seeding-cards .image-wrapper img {
- width: 100%; /* Image fills the width of its parent wrapper */
- max-width: 100%; /* Ensure it doesn't exceed parent width */
- height: auto; /* Maintain aspect ratio */
- max-height: 60vh;
- object-fit: contain;
- border: 1px solid #ddd;
- border-radius: 3px;
- margin-bottom: 5px; /* Space below image */
- /* Remove the JS style override for max-width */
-}
-
-body.dark-mode #seeding-gallery #image-seeding-cards .image-wrapper img {
- border-color: #555;
-}
-
-#seeding-gallery #image-seeding-cards .image-wrapper p {
- /* Style for the image name */
-  margin-top: 5px;
-  margin-bottom: 5px;
-  word-break: break-word; /* Allow breaking long words */
-  overflow-wrap: break-word; /* Alias for word-break */
   font-size: 0.9em;
-  color: #555; /* Default name color */
 }
-body.dark-mode #seeding-gallery #image-seeding-cards .image-wrapper p {
- color: #bbb; /* Dark mode name color */
-}
-
-
-/* Star Rating Styles (Refined for Containment and Centering) */
-#seeding-gallery #image-seeding-cards .star-rating {
- direction: rtl; /* Make stars appear left-to-right visually */
- display: inline-block; /* Or block, combined with text-align center */
- font-size: 25px; /* Adjust size as needed */
- margin-top: 5px;
- /* Ensure rating container has width/centering */
- width: 100%; /* Take full width of parent wrapper */
- text-align: center; /* Center the inline-block stars */
-  white-space: nowrap; /* Prevent stars from wrapping */
-  overflow: hidden; /* Hide any overflow */
-  margin-bottom: 0; /* Remove bottom margin */
+#head-to-head-ui .image-wrapper button:hover {
+  background: #900;
 }
 
-.star-rating input {
- display: none; /* Hide radio buttons */
+/* ==================================================================
+   7. Seeding Gallery Specific Styles
+================================================================== */
+#seeding-gallery { display: none; /* Hidden by default */ }
+
+#seeding-gallery h1 { margin-bottom: 10px; }
+#seeding-gallery p { margin-bottom: 20px; font-size: 0.95em; color: #555; }
+
+/* Seeding image container */
+#image-seeding-cards.image-container {
+  flex-direction: row; /* Allow wrapping */
+  justify-content: center; /* Center items */
+  align-items: flex-start; /* Align tops */
+  gap: 20px;
+  background: none; /* Transparent background */
+  border: none;
 }
 
+/* Seeding image wrapper */
+#image-seeding-cards .image-wrapper {
+  flex: 1 1 30%; /* Aim for ~3 columns */
+  max-width: 400px; /* Max width for seeding cards */
+  height: auto; /* Auto height */
+  max-height: none; /* No max height */
+  padding: 15px;
+}
+
+#image-seeding-cards .image-wrapper img {
+    max-height: 65vh; /* Limit seeding image height */
+    margin-bottom: 10px; /* Space below image */
+}
+
+/* Star Rating Styles */
+.star-rating {
+  direction: rtl;
+  display: inline-block;
+  font-size: 28px; /* Larger stars */
+  margin-top: 5px;
+  width: 100%;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  margin-bottom: 0;
+  line-height: 1; /* Prevent extra space */
+}
+.star-rating input { display: none; }
 .star-rating label {
- color: #888; /* Default star color */
- cursor: pointer;
- padding: 0 2px; /* Keep padding between stars */
-  transition: color 0.2s ease; /* Smooth color transition */
+  color: #bbb; /* Default grey */
+  cursor: pointer;
+  padding: 0 2px;
+  transition: color 0.2s ease;
 }
-
-/* Style for hover state and selected stars */
 .star-rating input:checked ~ label,
 .star-rating label:hover,
-.star-rating label:hover ~ label {
- color: gold; /* Highlight color */
-}
-
-/* Reset hover for the checked star and those after it */
+.star-rating label:hover ~ label { color: gold; }
 .star-rating input:checked + label:hover,
 .star-rating input:checked ~ label:hover,
 .star-rating input:checked ~ label:hover ~ label,
-.star-rating label:hover ~ input:checked ~ label {
- color: gold; /* Keep highlight */
-}
+.star-rating label:hover ~ input:checked ~ label { color: gold; }
 
-/* Specific style for the currently selected star and those before it */
-.star-rating input:checked ~ label {
- color: gold;
-}
-
-/* Dark mode overrides for stars */
-body.dark-mode .star-rating label {
-  color: #555; /* Default star color in dark mode */
-}
-body.dark-mode .star-rating input:checked ~ label,
-body.dark-mode .star-rating label:hover,
-body.dark-mode .star-rating label:hover ~ label {
- color: #ffeb3b; /* Yellowish highlight in dark mode */
-}
-
-
-/* Hide delete button in seeding view */
-#seeding-gallery #image-seeding-cards .image-wrapper button {
-  display: none;
-}
-
-
-/* Add these new styles to styles.css */
-
+/* Seeding Confirmation Buttons & Message */
 .confirm-button-container {
-  text-align: center; /* Center the button inside the container */
-  margin-top: 20px;    /* Space above the button container */
-  margin-bottom: 20px; /* Space below the button container */
+  text-align: center;
+  margin: 20px 0;
 }
-
-/* Update the button style to use the class selector */
-.confirm-seeding-button {
-  /* Copy existing styles from #confirm-seeding */
+.confirm-seeding-button,
+#confirm-remaining-button {
   padding: 10px 20px;
   font-size: 1.1em;
-  background-color: #4CAF50; /* Green */
   color: white;
   border: none;
   border-radius: 5px;
   cursor: pointer;
   transition: background-color 0.2s ease;
+  margin: 0 5px; /* Space buttons */
 }
-
-.confirm-seeding-button:hover:not(:disabled) {
-  /* Copy existing styles */
-  background-color: #45a049;
-}
-
-.confirm-seeding-button:disabled {
-  /* Copy existing styles */
-  background-color: #ccc;
-  cursor: not-allowed;
-}
-
-/* Dark mode overrides for the new class */
-body.dark-mode .confirm-seeding-button:not(:disabled) {
-  background-color: #3f51b5; /* Indigo */
-}
-body.dark-mode .confirm-seeding-button:hover:not(:disabled) {
-  background-color: #303f9f; /* Darker Indigo */
-}
-body.dark-mode .confirm-seeding-button:disabled {
-  background-color: #555;
-}
-
-/* Optional: Adjust margin specifically for the top/bottom if needed */
-#confirm-container-top {
-    margin-bottom: 15px; /* Slightly less margin below top button */
-}
-#confirm-container-bottom {
-    margin-top: 15px; /* Slightly less margin above bottom button */
-}
-
-/* Dark mode for seeding elements */
-body.dark-mode #confirm-seeding:not(:disabled) {
-  background-color: #3f51b5; /* Indigo */
-}
-body.dark-mode #confirm-seeding:hover:not(:disabled) {
-  background-color: #303f9f; /* Darker Indigo */
-}
-body.dark-mode #confirm-seeding:disabled {
-  background-color: #555;
-}
+.confirm-seeding-button { background-color: #4CAF50; /* Green */ }
+#confirm-remaining-button { background-color: #ff9800; /* Orange */ }
+.confirm-seeding-button:hover:not(:disabled) { background-color: #45a049; }
+#confirm-remaining-button:hover:not(:disabled) { background-color: #f57c00; }
+.confirm-seeding-button:disabled,
+#confirm-remaining-button:disabled { background-color: #ccc; cursor: not-allowed; }
 
 #seeding-message {
- margin-top: 10px;
+ margin-top: 15px;
+ margin-bottom: 15px;
  font-weight: bold;
+ min-height: 1.2em; /* Prevent layout jump */
 }
 
-/* Style for the image inside the seeding gallery card */
-#seeding-gallery #image-seeding-cards .image-wrapper img {
-  /* Existing styles */
+/* ==================================================================
+   8. Ranking List Styles (All Ranking Pages)
+================================================================== */
+
+/* Container for all ranking items */
+.ranking-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 95%; /* Wider */
+  max-width: 1100px; /* Wider max */
+  margin: 10px auto 20px auto; /* Center horizontally */
+}
+
+/* --- Base ranking item (grid) --- */
+.ranking-item {
+  display: grid;
   width: 100%;
-  max-width: 100%;
-  height: auto;
-  object-fit: contain;
+  gap: 5px 15px;
+  align-items: center; /* Default center align vertically */
+  margin: 6px 0; /* Slightly reduced margin */
+  padding: 10px 15px;
+  background: #fff;
   border: 1px solid #ddd;
-  border-radius: 3px;
-  margin-bottom: 5px;
+  border-radius: 5px;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  box-sizing: border-box;
+  /* Default assumes LoRA layout */
+  grid-template-columns: 1fr auto auto;
+  grid-template-rows: auto auto;
+  grid-template-areas:
+    "name   rating  matches"
+    "prog   prog    prog";
+}
 
-  /* Add transition for smoother zoom effect */
-  transition: transform 0.2s ease-out; /* Transition scale and origin */
-  transform-origin: center center; /* Default origin */
+/* --- Styles for items WITH IMAGE THUMBNAILS --- */
+.ranking-item:has(img) {
+    grid-template-columns: auto 1fr auto; /* Thumb | Details | Rating */
+    grid-template-rows: auto; /* Single row */
+    grid-template-areas: "thumb details rating";
+    align-items: center; /* Center items vertically in the row */
+}
+.ranking-item img { /* Thumbnail style */
+  grid-area: thumb;
+  width: 60px; height: 60px; object-fit: cover; border-radius: 4px;
+}
+.ranking-item .item-details { /* Wrapper for name/matches */
+    grid-area: details; text-align: left; overflow: hidden;
+}
+.ranking-item .item-details span:first-child { /* Name */
+    display: block; font-weight: 600; word-break: break-all; margin-bottom: 2px; line-height: 1.2;
+}
+.ranking-item .item-details span:last-child { /* Matches */
+     display: block; font-size: 0.9em; color: #666;
+}
+.ranking-item:has(img) > *:last-child { /* Rating span */
+    grid-area: rating; text-align: right; font-weight: bold; white-space: nowrap; font-size: 1.1em; color: #333;
+}
+.ranking-item:has(img) .progress-bar-container { display: none; } /* Hide progress bar */
 
-  /* Ensure the image is display: block to avoid extra space below it */
+/* --- Styles for items WITHOUT IMAGE THUMBNAILS (LoRA) --- */
+.ranking-item:not(:has(img)) span:nth-of-type(1) { grid-area: name; text-align: left; font-weight: bold; word-break: break-all; line-height: 1.3; }
+.ranking-item:not(:has(img)) span:nth-of-type(2) { grid-area: rating; text-align: right; white-space: nowrap; font-size: 0.95em; color: #333; }
+.ranking-item:not(:has(img)) span:nth-of-type(3) { grid-area: matches; text-align: right; white-space: nowrap; font-size: 0.95em; color: #555; }
+/* LoRA Progress Bar */
+.ranking-item:not(:has(img)) .progress-bar-container {
+  grid-area: prog; width: 100%; margin-top: 8px; position: relative; height: 10px;
+  overflow: hidden; border: 1px solid #ccc; background: #f3f3f3; border-radius: 3px;
+}
+.ranking-item:not(:has(img)) .progress-bar-background { position: absolute; inset: 0; background: #e0e0e0; }
+.ranking-item:not(:has(img)) .progress-bar { position: absolute; inset: 0; width: 0%; background: #4caf50; transition: width 0.3s ease; }
+
+/* Summary box above rankings */
+.summary {
+  width: 95%; max-width: 1100px; margin: 20px auto 10px auto; padding: 15px;
+  background: #f9f9f9; border: 1px solid #ccc; border-radius: 5px; text-align: left;
+}
+.summary p { margin: 5px 0; }
+
+/* Ranking Header (for sorting) */
+.ranking-header {
+  display: flex; justify-content: space-between; width: 95%; max-width: 1100px;
+  margin: 10px auto 5px auto; padding: 0 15px; box-sizing: border-box;
+  cursor: pointer; border-bottom: 2px solid #ccc; padding-bottom: 5px;
+}
+.ranking-header span { /* Default span style (for LoRA Model header) */
+  flex: 1 1 auto; text-align: left; font-weight: bold; padding: 5px 0;
+}
+.ranking-header span[data-sort="rating"],
+.ranking-header span[data-sort="matches"] { /* Rating/Matches headers */
+  flex: 0 0 auto; /* Size by content */ text-align: right; margin-left: 15px;
+}
+/* Header adjustments for Image Ranking pages */
+body:has(.ranking-item img) .ranking-header span[data-sort="image"] { margin-left: 75px; /* Approx offset for thumb */ }
+body:has(.ranking-item img) .ranking-header span[data-sort="matches"] { display: none; } /* Hide matches header */
+/* Sort indicators */
+.ranking-header span.sort-asc::after { content: " ▲"; font-size: 0.8em; }
+.ranking-header span.sort-desc::after { content: " ▼"; font-size: 0.8em; }
+
+/* ==================================================================
+   9. Compare LoRAs Table
+================================================================== */
+.table-container {
   display: block;
-  cursor: crosshair; /* Change cursor to indicate zoomability */
+  margin: 20px auto;
+  max-width: 95vw;
+  overflow-x: auto;
+  box-sizing: border-box;
+}
+
+#comparison-table { /* The table itself */
+  margin: auto; /* Center the table within the container */
+  min-width: 1000px; /* Adjust as needed */
+  border-collapse: collapse;
+  background: #fff;
+  font-size: 0.9em; /* Slightly smaller table text */
+}
+#comparison-table th,
+#comparison-table td {
+  border: 1px solid #ddd;
+  padding: 6px 8px; /* Adjust padding */
+  text-align: center;
+  white-space: nowrap; /* Prevent wrapping by default */
+}
+#comparison-table th {
+  cursor: pointer;
+  background-color: #f3f3f3;
+  position: sticky; /* Make header sticky */
+  top: 0; /* Stick to top */
+  z-index: 1; /* Above table content */
+}
+#comparison-table th.sort-asc::after { content: " ▲"; }
+#comparison-table th.sort-desc::after { content: " ▼"; }
+
+/* LoRA Name column in compare table */
+#comparison-table th.lora-name-cell,
+#comparison-table td.lora-name-cell {
+  max-width: 250px; /* Adjust */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap; /* Force truncation */
+  text-align: left;
+  position: sticky; /* Make first column sticky */
+  left: 0; /* Stick to left */
+  background: #fff; /* Needs background to cover scrolling content */
+  z-index: 2; /* Above sticky header background */
+}
+#comparison-table th.lora-name-cell {
+    background: #f3f3f3; /* Match header background */
+    z-index: 3; /* Above other headers and data cells */
 }
 
 
-/* Optional: styles for the image name and stars to ensure they stay below */
-#seeding-gallery .image-wrapper p,
-#seeding-gallery .image-wrapper .star-rating,
-#seeding-gallery .image-wrapper button {
-   position: relative; /* Keep stacking context */
-   z-index: 11; /* Stay above potentially overlapping zoomed image background */
-   /* Prevent text selection during zoom interaction */
-   user-select: none;
-   -webkit-user-select: none;
-   -moz-user-select: none;
-   -ms-user-select: none;
+/* Diff column highlights */
+.highlight-diff-positive { background-color: #e0ffe0; }
+.highlight-diff-negative { background-color: #ffe0e0; }
+
+/* Correlation Table */
+#correlation { margin: 20px auto; }
+#correlation table { min-width: auto; width: auto; } /* Don't force correlation table width */
+#correlation th, #correlation td { white-space: nowrap; padding: 5px 8px; }
+
+/* Explanation text box */
+.explanation-box { /* Generic class for text boxes */
+     width: 90%;
+     max-width: 800px;
+     margin: 20px auto;
+     padding: 15px;
+     background: #f9f9f9;
+     border: 1px solid #ccc;
+     border-radius: 5px;
+     text-align: left;
+     font-size: 0.9em;
+     line-height: 1.4;
 }
+
+
+/* ==================================================================
+   10. Tagger Page Styles
+================================================================== */
+#tagging-controls {
+  margin: 20px auto; padding: 20px; border: 1px solid #ccc; border-radius: 5px;
+  max-width: 700px; background-color: #f9f9f9; text-align: left; /* Align labels left */
+}
+#tagging-controls label, #tagging-controls select, #tagging-controls input, #tagging-controls button {
+  margin-right: 10px; margin-bottom: 10px; vertical-align: middle;
+}
+#tagging-controls fieldset {
+  margin-top: 15px; border: 1px solid #ccc; padding: 15px; margin-bottom: 15px; border-radius: 4px;
+}
+#tagging-controls legend { font-weight: bold; padding: 0 5px; }
+#tagging-controls .strategy-option { display: block; margin-bottom: 8px; }
+#tagging-controls .inline-input { display: inline-block; margin-left: 5px; }
+#tagging-controls .tuning-params {
+    display: none; margin-left: 25px; margin-top: 5px; font-size: 0.9em;
+    padding: 8px; background-color: #eee; border-radius: 3px;
+}
+#tagging-controls .tuning-params label { margin-right: 5px; font-weight: normal; }
+#tagging-controls .tuning-params input[type="number"],
+#tagging-controls .tuning-params input[type="text"] { width: auto; margin-bottom: 0; padding: 4px; }
+#tagging-controls small { color: #666; font-size: 0.9em; }
+#tagging-controls button#apply-tags-btn { display: block; margin: 15px auto 0 auto; } /* Center button */
+
+#results-area {
+  margin: 20px auto; padding: 15px; border: 1px solid #ccc; border-radius: 5px;
+  max-width: 700px; background-color: #e9e9e9; min-height: 80px; /* More height */
+  text-align: left; white-space: pre-wrap; font-family: monospace; font-size: 0.9em;
+}
+#results-area.processing { font-style: italic; color: blue; }
+#results-area.error { color: red; font-weight: bold; }
+#results-area.success { color: green; }
+
+/* ==================================================================
+   11. Notifications
+================================================================== */
+.notification {
+  display: none; width: 90%; max-width: 700px; margin: 20px auto; padding: 12px 15px;
+  background-color: #fffae6; border: 1px solid #ffd700; border-radius: 4px; color: #856404;
+}
+
+/* ==================================================================
+   12. Dark Mode Overrides
+================================================================== */
+body.dark-mode { background-color: #121212; color: #ccc; }
+body.dark-mode h1 { color: #eee; }
+body.dark-mode p { color: #bbb; }
+
+/* Navigation */
+body.dark-mode .navigation { background-color: #2a2a2a; border-bottom: 1px solid #444; }
+body.dark-mode .navigation a { color: #b0b0b0; }
+body.dark-mode .navigation a:hover { color: #fff; }
+body.dark-mode .navigation button { background-color: #555; color: #ccc; }
+body.dark-mode .navigation button:hover { background-color: #777; }
+body.dark-mode .navigation label { color: #bbb; }
+body.dark-mode .navigation label[for="darkModeToggle"] { color: #fff; }
+body.dark-mode .navigation select { background-color: #555; color: #ccc; border: 1px solid #444; }
+
+/* Controls */
+body.dark-mode .controls { background-color: #2a2a2a; border-color: #444; }
+body.dark-mode .controls label { color: #ccc; }
+body.dark-mode .controls input[type="text"],
+body.dark-mode .controls select { background-color: #383838; color: #ddd; border-color: #555; }
+body.dark-mode .controls button { background-color: #03a9f4; color: #121212; } /* Brighter blue */
+body.dark-mode .controls button:hover { background-color: #29b6f6; }
+
+/* Progress Bar */
+body.dark-mode .progress-container { background: #333; border-color: #555; }
+body.dark-mode .progress-label { color: #eee; text-shadow: 0 0 2px rgba(0,0,0,0.7); }
+body.dark-mode .threshold { background: #bbb; }
+body.dark-mode .threshold-label { color: #aaa; }
+
+/* Image Display */
+body.dark-mode .image-container { background: #1e1e1e; }
+body.dark-mode .image-wrapper { background: #2e2e2e; border: 1px solid #444; }
+body.dark-mode .image-wrapper img { border-color: #555; }
+body.dark-mode #head-to-head-ui .image-wrapper button { background: #a00; }
+body.dark-mode #head-to-head-ui .image-wrapper button:hover { background: #c00; }
+
+/* Seeding */
+body.dark-mode #seeding-gallery p { color: #aaa; }
+body.dark-mode #image-seeding-cards .image-wrapper { background: #2e2e2e; border: 1px solid #444; }
+body.dark-mode #image-seeding-cards .image-wrapper img { border-color: #555; }
+body.dark-mode .star-rating label { color: #555; }
+body.dark-mode .star-rating input:checked ~ label,
+body.dark-mode .star-rating label:hover,
+body.dark-mode .star-rating label:hover ~ label { color: #ffeb3b; }
+body.dark-mode .confirm-seeding-button:not(:disabled) { background-color: #03a9f4; color: #121212; }
+body.dark-mode .confirm-seeding-button:hover:not(:disabled) { background-color: #29b6f6; }
+body.dark-mode #confirm-remaining-button:not(:disabled) { background-color: #ffb74d; color: #121212;}
+body.dark-mode #confirm-remaining-button:hover:not(:disabled) { background-color: #ffa726;}
+body.dark-mode .confirm-seeding-button:disabled,
+body.dark-mode #confirm-remaining-button:disabled { background-color: #555; color: #888; }
+body.dark-mode #seeding-message.processing { color: lightblue; }
+body.dark-mode #seeding-message.error { color: #ff8a80; }
+body.dark-mode #seeding-message.success { color: #a5d6a7; }
+
+/* Rankings */
+body.dark-mode .ranking-container { /* No change needed */ }
+body.dark-mode .ranking-item { background: #2e2e2e; border: 1px solid #444; box-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+body.dark-mode .summary { background: #2a2a2a; border: 1px solid #444; }
+body.dark-mode .ranking-header { border-bottom-color: #555; }
+body.dark-mode .ranking-header span { color: #ccc; }
+/* Image Ranking Items */
+body.dark-mode .ranking-item:has(img) img { border-color: #555; }
+body.dark-mode .ranking-item .item-details span:first-child { color: #ddd; }
+body.dark-mode .ranking-item .item-details span:last-child { color: #aaa; }
+body.dark-mode .ranking-item:has(img) > *:last-child { color: #eee; } /* Brighter rating */
+/* LoRA Ranking Items */
+body.dark-mode .ranking-item:not(:has(img)) span:nth-of-type(1) { color: #ddd; }
+body.dark-mode .ranking-item:not(:has(img)) span:nth-of-type(1) strong { color: #eee; }
+body.dark-mode .ranking-item:not(:has(img)) span:nth-of-type(2) { color: #ccc; }
+body.dark-mode .ranking-item:not(:has(img)) span:nth-of-type(3) { color: #bbb; }
+body.dark-mode .ranking-item:not(:has(img)) .progress-bar-container { border: 1px solid #555; background: #444; }
+body.dark-mode .ranking-item:not(:has(img)) .progress-bar-background { background: #555; }
+body.dark-mode .ranking-item:not(:has(img)) .progress-bar { background: #388e3c; }
+
+/* Compare Table */
+body.dark-mode .table-container { /* No change needed */ }
+body.dark-mode #comparison-table { background-color: #1e1e1e; border-color: #444; }
+body.dark-mode #comparison-table th,
+body.dark-mode #comparison-table td { border-color: #444; color: #ccc;}
+body.dark-mode #comparison-table th { background-color: #333; color: #eee; }
+body.dark-mode #comparison-table th.lora-name-cell,
+body.dark-mode #comparison-table td.lora-name-cell { background-color: #2a2a2a; } /* Sticky column background */
+body.dark-mode #comparison-table th.lora-name-cell { background-color: #333; } /* Sticky header background */
+body.dark-mode .highlight-diff-positive { background-color: #1a4d2e; color: #a5d6a7; }
+body.dark-mode .highlight-diff-negative { background-color: #5a1a1a; color: #ff8a80; }
+body.dark-mode #correlation table { background-color: #2a2a2a; border-color: #444; }
+body.dark-mode .explanation-box { background: #2a2a2a; border-color: #444; }
+
+/* Tagger Page */
+body.dark-mode #tagging-controls { background-color: #2e2e2e; border-color: #444; }
+body.dark-mode #tagging-controls fieldset { border-color: #444; }
+body.dark-mode #tagging-controls .tuning-params { background-color: #383838; }
+body.dark-mode #tagging-controls small { color: #aaa; }
+body.dark-mode #results-area { background-color: #333; border-color: #555; color: #ccc; }
+body.dark-mode #results-area.processing { color: lightblue; }
+body.dark-mode #results-area.error { color: #ff8a80; }
+body.dark-mode #results-area.success { color: #a5d6a7; }
+
+/* Notifications */
+body.dark-mode .notification { background-color: #333; border-color: #666; color: #ffecb3; /* Lighter yellow text */ }
