@@ -72,8 +72,8 @@ document.addEventListener('DOMContentLoaded', () => {
             tagNamesInput.value = defaultTags;
         } else if (strategy === 'ponyQuantile') {
              // Pony score tags are fixed, disable editing? Or just inform user?
-             tagNamesInput.value = "score_3,score_4,score_5,score_6,score_7,score_8,score_9"; // Display fixed tags
-             tagNamesInput.disabled = true; // Disable editing for pony
+             tagNamesInput.value = "3,4,5,6,7,8,9"; // Display fixed tags
+             tagNamesInput.disabled = false; // no reason to disbale
         } else {
              tagNamesInput.disabled = false; // Re-enable if switching away from pony
         }
