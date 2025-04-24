@@ -123,41 +123,35 @@
       const searchTerm = (document.getElementById('search')?.value || '').toLowerCase();
 
       // --- Update Header Display ---
-      // Show/Hide Matches header based on context (Image vs LoRA)
       const matchesHeader = header.querySelector('span[data-sort="matches"]');
       if(matchesHeader) {
-          // Assuming image rankings pages have img tags inside items
-          const isImageRanking = container.querySelector('.ranking-item img') !== null || rankingsData.some(item => item.image); // Check data too just in case
-          // Technically, this check should ideally happen *before* clearing the container,
-          // but checking the data source (rankingsData) might be more reliable.
-          // For simplicity, let's assume rankingsData tells us if it's image or LoRA based on structure.
-          // Modify this check based on your actual data structure if needed.
-          const hasImageThumbnails = true; // Assume these pages ALWAYS have thumbnails
-          matchesHeader.style.display = hasImageThumbnails ? 'none' : 'inline-block'; // Hide if image page
+          // rankings.html always shows image thumbs, so hide matches header
+          matchesHeader.style.display = 'none';
       }
 
-
       rankingsData
-        .filter(item => item.image.toLowerCase().includes(searchTerm)) // Assuming 'image' field exists
+        .filter(item => item.image.toLowerCase().includes(searchTerm) || item.lora?.toLowerCase().includes(searchTerm)) // Search image name OR lora name
         .forEach(item => {
           const div = document.createElement('div');
-          div.className = 'ranking-item';
+          div.className = 'ranking-item'; // Uses the grid layout defined in CSS
 
-          // Determine image source based on page type (AI vs Normal)
-          const imageBaseUrl = window.location.pathname.includes('rankings-normal.html')
-                              ? 'normal-images'
-                              : 'images';
+          // Get LoRA name - handle potential empty/NONE cases
+          const loraName = item.lora || 'Unknown'; // Display 'Unknown' if lora is empty/null
+          const displayLora = (loraName === 'NONE' || loraName === 'Unknown') ? loraName : `LoRA: ${loraName}`;
+          const loraClass = (loraName === 'NONE' || loraName === 'Unknown') ? 'lora-none' : 'lora-name';
 
-          // **** WRAP Name and Matches in a div ****
+
+          // **** ADD LORA SPAN INSIDE item-details ****
           div.innerHTML = `
-            <img src="${imageBaseUrl}/${currentSubset}/${item.image}" alt="${item.image}">
+            <img src="images/${currentSubset}/${item.image}" alt="${item.image}">
             <div class="item-details">
                 <span>${item.image}</span>
+                <span class="${loraClass}">${displayLora}</span> <!-- Added LoRA Span -->
                 <span>(Matches: ${item.matches ?? 0})</span>
             </div>
             <span>${item.rating?.toFixed(2) ?? 'N/A'}</span>
           `;
-          // **** END WRAP ****
+          // **** END CHANGE ****
 
           container.appendChild(div);
         });

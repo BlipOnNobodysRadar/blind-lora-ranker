@@ -290,7 +290,7 @@ p {
 .image-wrapper img {
   display: block;
   max-width: 100%;
-  max-height: 90%; /* Limit image height within wrapper */
+  max-height: calc(100% - 50px); /* Example: leave ~50px for button+margins */
   height: auto;
   object-fit: contain; /* Scale image nicely */
   cursor: crosshair;
@@ -459,8 +459,14 @@ p {
   grid-area: thumb;
   width: 60px; height: 60px; object-fit: cover; border-radius: 4px;
 }
-.ranking-item .item-details { /* Wrapper for name/matches */
-    grid-area: details; text-align: left; overflow: hidden;
+.ranking-item .item-details {
+  grid-area: details;
+  text-align: left;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
 }
 .ranking-item .item-details span:first-child { /* Name */
     display: block; font-weight: 600; word-break: break-all; margin-bottom: 2px; line-height: 1.2;
