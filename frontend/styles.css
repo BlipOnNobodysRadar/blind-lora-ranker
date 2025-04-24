@@ -280,7 +280,10 @@ p {
 
 /* Rating Page Specific: Limit height */
 #head-to-head-ui .image-wrapper {
+    min-height: 75vh; /* Adjust % as needed - reserves vertical space */
     max-height: 85vh; /* Limit height on rating page */
+    justify-content: space-between; /* Push button to bottom */
+
 }
 
 /* Base Image Styling (for zoom, etc.) */
