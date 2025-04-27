@@ -738,11 +738,13 @@ function loadSubset(subset) {
     let directoryExists = false;
     let files = [];
 
+    // 1. Load saved ratings data FIRST
     if (fs.existsSync(ratingFile)) {
         try { savedData = JSON.parse(fs.readFileSync(ratingFile, 'utf8')); }
         catch (e) { console.error(`Error parsing ${ratingFile}:`, e.message); }
     }
 
+    // 2. Check if image directory exists
     try {
         if (fs.existsSync(subsetPath) && fs.statSync(subsetPath).isDirectory()) {
             directoryExists = true;
@@ -751,61 +753,110 @@ function loadSubset(subset) {
     } catch (dirErr) { console.warn(`Error accessing ${subsetPath}: ${dirErr.message}. Loading offline.`); }
 
     let images = {};
-    let loraModels = {};
+    let loraModels = {}; // Will include 'NONE' if necessary
 
-    // Init LoRAs from saved data
+    // 3. Initialize LoRA models from saved data FIRST
     if (savedData.loraModelRatings) {
         for (const loraName in savedData.loraModelRatings) {
-            loraModels[loraName] = {
-                rating: savedData.loraModelRatings[loraName]?.rating ?? 1000,
-                matches: savedData.loraModelRatings[loraName]?.count ?? 0
-            };
+            // Ensure "NONE" from saved data is also added correctly
+             if (!loraModels[loraName]) {
+                loraModels[loraName] = {
+                    rating: savedData.loraModelRatings[loraName]?.rating ?? 1000,
+                    matches: savedData.loraModelRatings[loraName]?.count ?? 0
+                };
+             }
         }
+         // Ensure the 'NONE' category exists if there are saved ratings, even if no 'NONE' LoRAs yet
+         if (!loraModels['NONE'] && Object.keys(savedData.loraModelRatings).length > 0) {
+            // Initialize NONE only if it wasn't explicitly saved (or provide default if loading completely fresh)
+             // Check if NONE existed in the saved data specifically
+             if (!savedData.loraModelRatings['NONE']) {
+                 loraModels['NONE'] = { rating: 1000, matches: 0 };
+                 console.log(`Initializing 'NONE' LoRA category for subset "${subset}" (not found in saved).`);
+             }
+         }
     }
 
-    // Process image files if directory exists
+
+    // 4. Process image files ONLY if the directory exists
     if (directoryExists) {
         files.forEach(file => {
             const imagePath = path.join(subsetPath, file);
-            const loraFromFile = getPngMetadata(imagePath);
-            const savedRating = savedData.ratings?.[file] ?? null;
-            const savedMatches = savedData.matchCount?.[file] ?? null;
+            let loraFromFile = getPngMetadata(imagePath); // Returns '', 'NONE', or 'LoraName:Strength'
 
-            // Only track image if it has metadata OR was previously saved/rated
-            if (loraFromFile || savedRating !== null) {
-                images[file] = {
-                    rating: savedRating,
-                    matches: savedRating !== null ? (savedMatches ?? 0) : null,
-                    lora: loraFromFile || (savedData.images?.[file]?.lora ?? '')
-                };
-                // Ensure LoRA model exists if found in file
-                if (loraFromFile && loraFromFile !== 'NONE' && !loraModels[loraFromFile]) {
-                    loraModels[loraFromFile] = { rating: 1000, matches: 0 };
-                }
+            // **** MODIFICATION START ****
+            // Treat empty string ('') as 'NONE' for grouping purposes
+            if (loraFromFile === '') {
+                console.log(`Image "${file}" has no detectable LoRA metadata, assigning to 'NONE'.`);
+                loraFromFile = 'NONE';
+            }
+            // **** MODIFICATION END ****
+
+            const ratingExistsInSaved = savedData.ratings?.hasOwnProperty(file);
+            const savedRating = ratingExistsInSaved ? savedData.ratings[file] : null;
+            const savedMatches = ratingExistsInSaved ? (savedData.matchCount?.[file] ?? 0) : null;
+
+            // We now always have a non-empty loraFromFile ('NONE' or specific LoRA)
+            // Keep the image regardless of whether it was previously saved,
+            // as even new 'NONE' images need to be tracked for seeding/rating.
+
+            images[file] = {
+                rating: savedRating,
+                matches: savedRating !== null ? savedMatches : null, // Use null matches only if rating is null
+                // Prioritize LoRA from file if available ('NONE' or specific),
+                // fallback to saved LoRA only if file parsing failed AND it was saved previously.
+                lora: loraFromFile // Now guaranteed to be 'NONE' or a specific LoRA name/strength
+            };
+
+            // Ensure the corresponding LoRA model entry exists (could be 'NONE')
+            if (!loraModels[loraFromFile]) {
+                 // If this LoRA ('NONE' or specific) wasn't in the saved JSON, initialize it now
+                loraModels[loraFromFile] = { rating: 1000, matches: 0 };
+                console.log(`Initializing category for LoRA "${loraFromFile}" discovered from image "${file}".`);
             }
         });
     }
 
-    // Add images present only in saved data
+    // 5. Add images present only in saved data (handle potential 'NONE' here too)
     if (savedData.ratings) {
         for (const savedFile in savedData.ratings) {
             if (!images[savedFile]) { // If not loaded from directory
+                // **** MODIFICATION START ****
+                // Determine LoRA, defaulting to 'NONE' if not explicitly saved
+                let savedLora = savedData.images?.[savedFile]?.lora || 'NONE';
+                if (savedLora === '') savedLora = 'NONE'; // Ensure empty string becomes 'NONE'
+                // **** MODIFICATION END ****
+
                 images[savedFile] = {
                     rating: savedData.ratings[savedFile],
                     matches: savedData.matchCount?.[savedFile] ?? 0,
-                    lora: savedData.images?.[savedFile]?.lora ?? ''
+                    lora: savedLora
                 };
-                 // Ensure LoRA model exists if mentioned in saved image data (less reliable)
-                 const savedLora = savedData.images?.[savedFile]?.lora;
-                 if (savedLora && savedLora !== 'NONE' && !loraModels[savedLora]) {
-                     // Check if this LoRA exists in loraModelRatings first
-                     if (!savedData.loraModelRatings?.[savedLora]) {
-                          loraModels[savedLora] = { rating: 1000, matches: 0 }; // Initialize if completely new
-                     }
+
+                // Ensure LoRA model exists from saved data
+                 if (!loraModels[savedLora]) {
+                    // Check if it existed in the main saved lora ratings section
+                    if (savedData.loraModelRatings?.[savedLora]) {
+                         loraModels[savedLora] = {
+                              rating: savedData.loraModelRatings[savedLora]?.rating ?? 1000,
+                              matches: savedData.loraModelRatings[savedLora]?.count ?? 0
+                         };
+                    } else {
+                         // If truly not seen before, initialize
+                         loraModels[savedLora] = { rating: 1000, matches: 0 };
+                         console.log(`Initializing category for LoRA "${savedLora}" discovered from saved image data "${savedFile}".`);
+                    }
                  }
             }
         }
     }
+
+    // Ensure 'NONE' category exists if any images were assigned to it, even if no saved data
+    if (Object.values(images).some(img => img.lora === 'NONE') && !loraModels['NONE']) {
+         loraModels['NONE'] = { rating: 1000, matches: 0 };
+         console.log(`Initializing 'NONE' LoRA category for subset "${subset}" as images were assigned to it.`);
+    }
+
 
     subsets[subset] = { images, loraModels };
     console.log(`Loaded AI subset "${subset}". Images: ${Object.keys(images).length}, LoRAs: ${Object.keys(loraModels).length}. Mode: ${directoryExists ? 'Online' : 'Offline'}`);
