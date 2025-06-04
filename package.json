@@ -2,11 +2,15 @@
   "name": "ai-image-blind-elo-ranker",
   "version": "1.0.0",
   "scripts": {
-    "start": "node backend/server.js"
+    "start": "node backend/server.js",
+    "test": "mocha"
   },
   "dependencies": {
     "body-parser": "^1.20.2",
     "express": "^4.19.2",
     "png-metadata": "^1.0.2"
+  },
+  "devDependencies": {
+    "mocha": "^10.0.0"
   }
 }
