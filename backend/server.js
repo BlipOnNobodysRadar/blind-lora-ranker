@@ -1287,9 +1287,15 @@ function escapeCSV(value) {
 // ========================================
 // --- Server Start ---
 // ========================================
-app.listen(3000, () => {
-    console.log('-----------------------------------------------------');
-    console.log(' Blind LoRA/Image Ranker Server Started');
-    console.log(' Access UI at: http://localhost:3000');
-    console.log('-----------------------------------------------------');
-});
+if (require.main === module) {
+    app.listen(3000, () => {
+        console.log('-----------------------------------------------------');
+        console.log(' Blind LoRA/Image Ranker Server Started');
+        console.log(' Access UI at: http://localhost:3000');
+        console.log('-----------------------------------------------------');
+    });
+}
+
+module.exports = {
+    kmeans1D
+};
