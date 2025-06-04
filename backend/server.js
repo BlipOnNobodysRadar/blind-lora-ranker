@@ -389,12 +389,12 @@ app.post('/api/apply-tags/normal/:subset', async (req, res) => {
 
             case 'equalQuantile':
                 const currentNumBinsEQ = parseInt(numBins, 10);
-                if (!currentNumBins || currentNumBins < 2) throw new Error('Number of bins must be at least 2.');
-                if (effectiveBinTags.length !== currentNumBins) throw new Error(`Tag names count (${effectiveBinTags.length}) must match bins (${currentNumBins}).`);
-                if (ratedImages.length < currentNumBins) throw new Error(`Need at least ${currentNumBins} rated images.`);
+                if (!currentNumBinsEQ || currentNumBinsEQ < 2) throw new Error('Number of bins must be at least 2.');
+                if (effectiveBinTags.length !== currentNumBinsEQ) throw new Error(`Tag names count (${effectiveBinTags.length}) must match bins (${currentNumBinsEQ}).`);
+                if (ratedImages.length < currentNumBinsEQ) throw new Error(`Need at least ${currentNumBinsEQ} rated images.`);
                 ratedImages.sort((a, b) => a.rating - b.rating);
                 const sortedScoresEQ = ratedImages.map(img => img.rating);
-                const equalQuantiles = Array.from({ length: currentNumBins }, (_, i) => (i + 1) / currentNumBins);
+                const equalQuantiles = Array.from({ length: currentNumBinsEQ }, (_, i) => (i + 1) / currentNumBinsEQ);
                 ratedImages.forEach(img => imageTags[img.name] = getTagFromQuantiles(img.rating, sortedScoresEQ, effectiveBinTags, equalQuantiles));
                 break;
 
