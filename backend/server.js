@@ -9,6 +9,7 @@ const path = require('path');
 
 // --- Third-party Modules ---
 const pngMetadata = require('png-metadata');
+const { createDpoRouter } = require('./dpo-batches');
 
 // --- Application Setup ---
 const app = express();
@@ -19,6 +20,8 @@ const AI_IMAGES_DIR = path.join(__dirname, '../AI_images');
 const NORMAL_IMAGES_DIR = path.join(__dirname, '../normal_images');
 const FRONTEND_DIR = path.join(__dirname, '../frontend');
 const DATA_DIR = path.join(__dirname, '../data');
+
+app.use('/api/dpo', createDpoRouter(DATA_DIR));
 
 let subsets = {}; // In-memory store for AI subsets
 let normalSubsets = {}; // In-memory store for Normal subsets

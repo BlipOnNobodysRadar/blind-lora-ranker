@@ -1,0 +1,75 @@
+.dpo {
+  --surface: #fff;
+  --edge: #a9b3bd;
+  --accent: #005e91;
+  --tint: #edf6fa;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 1rem;
+  text-align: left;
+}
+.dark-mode .dpo {
+  --surface: #24292e;
+  --edge: #59656d;
+  --accent: #7cd5fe;
+  --tint: #20343d;
+}
+.dpo [hidden] { display: none; }
+.dpo .batch-heading, .dpo .actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+.dpo .batch-heading { justify-content: space-between; margin: .65rem 0; }
+.dpo h1 { margin: .4rem 0; }
+.dpo details, .dpo fieldset, .dpo .export-panel {
+  border: 1px solid var(--edge);
+  border-radius: .5rem;
+  background: var(--surface);
+  padding: .8rem 1rem;
+  margin: 0;
+}
+.dpo summary, .dpo legend { font-weight: bold; }
+.dpo summary { cursor: pointer; }
+.dpo details fieldset { border: 0; padding: 1rem 0 0; }
+.dpo textarea, .dpo select, .dpo button {
+  color: inherit;
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  padding: .45rem .7rem;
+  border-radius: .35rem;
+  font: inherit;
+}
+.dpo select { max-width: min(65vw, 32rem); }
+.dpo textarea { width: 100%; margin: .3rem 0; resize: vertical; }
+.dpo button { cursor: pointer; }
+.dpo button:disabled { opacity: .5; cursor: default; }
+.dpo button:focus-visible, .dpo textarea:focus-visible, .dpo select:focus-visible { outline: 3px solid var(--accent); }
+.dpo .primary { background: #005e91; color: white; border-color: #005e91; }
+.dpo #drop {
+  display: grid;
+  gap: .6rem;
+  justify-items: center;
+  border: 2px dashed var(--edge);
+  border-radius: .4rem;
+  background: var(--tint);
+  margin: .4rem 0 .8rem;
+  padding: 1rem;
+}
+.dpo #drop.over { border-color: var(--accent); }
+.dpo #status:empty, .dpo #export-result:empty { margin: 0; }
+.dpo #status, .dpo #export-result, .dpo #prompt-caption { white-space: pre-wrap; overflow-wrap: anywhere; }
+.dpo #grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .65rem; margin: .8rem 0; }
+.dpo .card { padding: .35rem; display: grid; gap: .35rem; text-align: left; }
+.dpo .card[aria-pressed=true] { outline: 3px solid var(--accent); }
+.dpo .card img { width: 100%; height: clamp(100px, 25vh, 300px); object-fit: contain; background: #13171b; }
+.dpo .card span { padding: 0 .3rem; }
+.dpo #rating-controls small { display: block; margin: .7rem 0; }
+.dpo #scale button { min-width: 2.5rem; }
+.dpo #scale button[aria-pressed=true] { background: var(--accent); color: var(--surface); }
+.dpo .export-panel { margin-top: 1rem; }
+.dpo dialog { background: var(--surface); color: inherit; padding: .6rem; border: 0; }
+.dpo dialog::backdrop { background: rgba(0, 0, 0, .8); }
+.dpo #preview-image { display: block; max-width: 92vw; max-height: 82vh; margin-top: .5rem; }
+@media (max-width: 720px) { .dpo #grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

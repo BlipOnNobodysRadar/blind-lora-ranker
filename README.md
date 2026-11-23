@@ -75,6 +75,27 @@ Use at your own risk and feel free to contribute or adapt it for your needs.
 
 ## Organize Images
 
+### Rate a generation batch for AI Toolkit DPO
+
+1. Run `npm install` and `npm start`. Open [Rate for DPO](http://localhost:3000/dpo.html).
+2. Paste the exact positive prompt, then drop its generated PNGs or choose a folder and click **Start batch**.
+   A folder imports its top-level PNGs. Each batch has one shared prompt. The DPO page accepts PNGs directly
+   from ComfyUI and uses the prompt you enter.
+3. Rate the selected image with **1–9** or **0** for ten. Scores save as you go. Use the arrow keys to revisit
+   images or **Enlarge selected** to inspect details. The grid hides filenames and generation settings and
+   uses a stable shuffled order. Open the same batch later to add images or change ratings.
+4. Click **Export DPO dataset**. The result shows the path under `data/dpo-exports/dataset-<id>/`. In AI
+   Toolkit select offline DPO, set the target dataset to `chosen/`, and the rejected dataset to `rejected/`.
+   To train a second LoRA on top of the one that produced the images, set **Frozen reference LoRA (optional)**
+   and **Reference LoRA strength** in the updated fork. [AI Toolkit DPO guide](https://github.com/BlipOnNobodysRadar/ai-toolkit/blob/main/docs/MOSS_DPO.md)
+
+Each export keeps the prompt captions, original PNGs, raw scores and pair membership (`ratings.json`).
+Pairs match displayed resolution and use unequal scores. An image appears in at most four comparisons.
+The `chosen/*.dpo.json` sidecars give the trainer a stronger target for larger score gaps. Exports are
+independent snapshots, so you can change ratings and export again. Sessions live under `data/dpo-batches/`.
+
+### Prepare folders for Elo comparisons
+
 Currently you need to do some manual movement of image files and folder-making to get started. Making this process doable in the UI is on the todo list, but for now:
 
 1.  Inside `AI_images` (for LoRA tracking) or `normal_images` (for general image rating), create subdirectories for each subset you want. The name doesn't matter, pick what makes sense to you.
