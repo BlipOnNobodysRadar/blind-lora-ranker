@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rate for DPO · Blind LoRA Ranker</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="dpo.css">
+  <script defer src="darkModeScript.js"></script>
+  <script defer src="dpo.js"></script>
+</head>
+<body>
+  <nav class="navigation">
+    <a href="index.html">Rate AI Images</a>
+    <a href="index-normal.html">Rate Normal Images</a>
+    <a href="dpo.html" aria-current="page">Rate for DPO</a>
+    <a href="rankings.html">AI Image Elo Rankings</a>
+    <a href="rankings-normal.html">Normal Image Elo Rankings</a>
+    <a href="lora-rankings.html">LoRA Elo Rankings</a>
+    <a href="compare-loras.html">Compare LoRAs</a>
+    <a href="tagger.html">Apply Elo Tags</a>
+    <label><input type="checkbox" id="darkModeToggle"> Dark Mode</label>
+  </nav>
+  <main class="dpo">
+    <header class="batch-heading">
+      <h1>Rate for DPO</h1>
+      <label>Batch <select id="batch"><option value="">New batch…</option></select></label>
+    </header>
+
+    <details id="importer" open>
+      <summary id="import-title">Import a prompt batch</summary>
+      <fieldset id="import-fields">
+        <label for="prompt">Shared positive prompt</label>
+        <textarea id="prompt" rows="3" placeholder="Paste the exact prompt used for every generation in this batch."></textarea>
+        <div id="drop">
+          <strong>Drop PNGs from this prompt here</strong>
+          <div>
+            <button type="button" id="pick-files">Choose PNGs</button>
+            <button type="button" id="pick-folder">Choose folder</button>
+            <input hidden type="file" id="files" accept=".png,image/png" multiple>
+            <input hidden type="file" id="folder" webkitdirectory multiple>
+          </div>
+          <span id="selection">Each folder selection imports its top-level PNGs.</span>
+        </div>
+        <button type="button" id="start" class="primary" disabled>Start batch</button>
+      </fieldset>
+    </details>
+    <p id="status" role="status" aria-live="polite"></p>
+
+    <section id="rating" hidden aria-label="Blind image ratings">
+      <p id="prompt-caption"></p>
+      <div class="batch-heading">
+        <strong id="progress"></strong>
+        <div class="actions">
+          <button type="button" id="previous" aria-label="Previous image">← Previous</button>
+          <button type="button" id="next" aria-label="Next image">Next →</button>
+          <button type="button" id="zoom">Enlarge selected</button>
+        </div>
+      </div>
+      <div id="grid" aria-label="Image grid"></div>
+      <fieldset id="rating-controls">
+        <legend id="score-label">Score selected image</legend>
+        <div id="scale" class="actions"></div>
+        <small>Press 1–9 or 0 for 10. Each score saves and moves to the next unrated image. Use ← and → to review.</small>
+        <button id="clear" type="button">Clear selected score</button>
+      </fieldset>
+      <section class="export-panel">
+        <button id="export" class="primary" type="button">Export DPO dataset</button>
+        <p id="export-result" role="status"></p>
+      </section>
+    </section>
+    <dialog id="preview">
+      <button id="close-preview" type="button">Close preview</button>
+      <img id="preview-image" alt="Selected generation, enlarged">
+    </dialog>
+  </main>
+</body>
+</html>
